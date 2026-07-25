@@ -988,18 +988,23 @@
                         );
 
                         if (!popup) {
-                            alert('팝업 차단이 활성화되어 있습니다. 브라우저 설정에서 팝업 허용 후 다시 시도해주세요.');
+                            alert('팝업 차단이 활성화되어 있습니다. 브라우저 주소창 우측에서 팝업 허용 후 다시 시도해주세요.');
                         }
                         return;
+                    }
+                } else {
+                    const errData = await res.json();
+                    if (errData && errData.error) {
+                        alert(`[Google OAuth 설정 필요]\n${errData.error}`);
                     }
                 }
             } catch (err) {
                 console.warn('Google OAuth authorization URL fetch exception:', err);
             }
 
-            // Fallback for environment prior to setting GOOGLE_CLIENT_ID
+            // Fallback for environment prior to setting valid GOOGLE_CLIENT_ID
             const sampleGmail = prompt(
-                "[Google OAuth 2.0 연동 안내]\nRender Cloud 환경변수(GOOGLE_CLIENT_ID) 설정 전용 시뮬레이터입니다.\n로그인/가입에 사용할 Gmail 계정을 입력하세요:",
+                "[Google OAuth 2.0 빠른 테스트]\nGoogle Cloud Console에서 Client ID 발급 전 또는 재발급 등록 중 빠른 회원가입/로그인 테스트 모드입니다.\n로그인 및 회원가입에 사용할 Gmail 계정을 입력하세요:",
                 "ohseyokr@gmail.com"
             );
             if (!sampleGmail || !sampleGmail.trim()) return;
