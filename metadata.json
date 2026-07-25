@@ -1,0 +1,6 @@
+{
+  "name": "StarRealtor Land",
+  "description": "StarRealtor Land Brokerage Platform with Google Meet Schedule Matching, 360 Panorama VR, and Secure PDF Viewer",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
