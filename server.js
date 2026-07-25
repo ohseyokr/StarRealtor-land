@@ -36,6 +36,9 @@ if (process.env.DATABASE_URL) {
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
     });
+    pool.on('error', (err) => {
+      console.warn('⚠️ PostgreSQL Pool idle client error (fallback to in-memory):', err.message);
+    });
     usePg = true;
     console.log('🔗 Configured PostgreSQL pool via DATABASE_URL');
   } catch (err) {
@@ -283,7 +286,7 @@ app.get('/api/config', async (req, res) => {
       const result = await pool.query('SELECT * FROM TB_OWNER_CONFIG LIMIT 1');
       if (result.rows.length > 0) return res.json(result.rows[0]);
     } catch (e) {
-      console.error('DB query error on config:', e);
+      console.warn('DB query config warning (falling back to inMemoryDB):', e.message);
     }
   }
   res.json(inMemoryDB.config);
