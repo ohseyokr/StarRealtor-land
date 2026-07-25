@@ -758,15 +758,39 @@
             });
         }
 
-        function checkStoredAuth() {
+        async function checkStoredAuth() {
             const token = localStorage.getItem('proptech_token');
+            if (!token) return;
+
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.user) {
+                        currentUser = {
+                            token: token,
+                            role: data.user.role,
+                            nickname: data.user.nickname,
+                            email: data.user.email,
+                            user_id: data.user.user_id
+                        };
+                        updateAuthUI();
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Stored token verification check failed:', e);
+            }
+
             const role = localStorage.getItem('proptech_role');
             const nickname = localStorage.getItem('proptech_nickname');
             const email = localStorage.getItem('proptech_email');
             const userId = localStorage.getItem('proptech_userid');
 
             if (token && role) {
-                currentUser = { token, role, nickname, email, user_id: userId };
+                currentUser = { token, role, nickname, email: email || 'user@domain.com', user_id: userId };
                 updateAuthUI();
             }
         }
@@ -792,9 +816,9 @@
                 userBadge.className = 'bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2.5 py-0.5 border border-[#3A5A40]/30 text-[11px]';
 
                 if (currentUser.role === 'STAFF' || currentUser.role === 'ADMIN') {
-                    staffAddBtn.classList.remove('hidden');
+                    if (staffAddBtn) staffAddBtn.classList.remove('hidden');
                 } else {
-                    staffAddBtn.classList.add('hidden');
+                    if (staffAddBtn) staffAddBtn.classList.add('hidden');
                 }
                 updateCartBadge();
             } else {
@@ -802,7 +826,7 @@
                 userBtnGroup.classList.add('hidden');
                 userBadge.innerText = '비회원 (Guest)';
                 userBadge.className = 'bg-[#F5F2ED] text-black/50 font-medium px-2.5 py-0.5 border border-black/10 text-[11px]';
-                staffAddBtn.classList.add('hidden');
+                if (staffAddBtn) staffAddBtn.classList.add('hidden');
             }
         }
 
@@ -811,8 +835,15 @@
         // -------------------------------------------------------------
         async function handleLoginSubmit(e) {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
-            const password = document.getElementById('login-password').value;
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            const email = emailInput ? emailInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value : '';
+
+            if (!email || !password) {
+                alert('이메일과 비밀번호를 모두 입력해주세요.');
+                return;
+            }
 
             try {
                 const res = await fetch('/api/auth/login', {
@@ -821,24 +852,31 @@
                     body: JSON.stringify({ email, password })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || '로그인 실패');
+                if (!res.ok) throw new Error(data.error || '로그인에 실패하였습니다.');
 
                 saveUserSession(data);
                 closeModal('login-modal');
-                alert(`환영합니다, ${data.nickname}님! (${data.role} 권한 로그인 성공)`);
+                if (emailInput) emailInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+                alert(`환영합니다, ${data.nickname}님! (${data.role} 권한으로 로그인되었습니다.)`);
             } catch (err) {
-                alert(err.message);
+                alert(`[로그인 오류] ${err.message}`);
             }
         }
 
         async function handleSignupSubmit(e) {
             e.preventDefault();
-            const email = document.getElementById('signup-email').value;
+            const email = document.getElementById('signup-email').value.trim();
             const password = document.getElementById('signup-password').value;
-            const nickname = document.getElementById('signup-nickname').value;
-            const name = document.getElementById('signup-name').value;
-            const phone_number = document.getElementById('signup-phone').value;
+            const nickname = document.getElementById('signup-nickname').value.trim();
+            const name = document.getElementById('signup-name').value.trim();
+            const phone_number = document.getElementById('signup-phone').value.trim();
             const role = document.getElementById('signup-role').value;
+
+            if (!email || !password || !nickname) {
+                alert('이메일, 비밀번호, 별명은 필수 입력 사항입니다.');
+                return;
+            }
 
             try {
                 const res = await fetch('/api/auth/signup', {
@@ -847,35 +885,43 @@
                     body: JSON.stringify({ email, password, nickname, name, phone_number, role })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || '회원가입 실패');
+                if (!res.ok) throw new Error(data.error || '회원가입에 실패하였습니다.');
 
                 saveUserSession(data);
                 closeModal('signup-modal');
                 alert(`회원가입이 완료되었습니다! ${data.nickname}님 환영합니다.`);
             } catch (err) {
-                alert(err.message);
+                alert(`[회원가입 오류] ${err.message}`);
             }
         }
 
         async function triggerGoogleOAuthLogin() {
-            // Google OAuth Simulation
-            const sampleGmail = prompt("Google 계정 로그인 (Gmail 주소를 입력하세요):", "ohseyokr@gmail.com");
-            if (!sampleGmail) return;
+            const sampleGmail = prompt("Google OAuth 로그인할 Gmail 계정 주소를 입력하세요:", "ohseyokr@gmail.com");
+            if (!sampleGmail || !sampleGmail.trim()) return;
+
+            const trimmedEmail = sampleGmail.trim();
+            if (!trimmedEmail.includes('@')) {
+                alert('유효한 이메일 주소 형식이 아닙니다.');
+                return;
+            }
 
             try {
                 const res = await fetch('/api/auth/google', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: sampleGmail, name: sampleGmail.split('@')[0] })
+                    body: JSON.stringify({
+                        email: trimmedEmail,
+                        name: trimmedEmail.split('@')[0]
+                    })
                 });
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Google 로그인 실패');
+                if (!res.ok) throw new Error(data.error || 'Google 로그인에 실패하였습니다.');
 
                 saveUserSession(data);
                 closeModal('login-modal');
-                alert(`Google 계정(${data.email})으로 로그인되었습니다! [권한: ${data.role}]`);
+                alert(`Google 계정(${data.email})으로 성공적으로 로그인되었습니다! [권한: ${data.role}]`);
             } catch (err) {
-                alert(err.message);
+                alert(`[Google 로그인 오류] ${err.message}`);
             }
         }
 
