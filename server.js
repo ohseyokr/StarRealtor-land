@@ -616,7 +616,53 @@ const handleGoogleCallback = async (req, res) => {
     `);
   } catch (err) {
     console.error('Google OAuth Callback Exception:', err);
-    res.status(500).send(`Google OAuth 로그인 오류: ${err.message}`);
+
+    const isInvalidClient = err.message && (err.message.includes('invalid_client') || err.message.includes('401'));
+    
+    let errorTitle = 'Google OAuth 로그인 오류';
+    let errorMessage = err.message || '알 수 없는 인증 오류가 발생했습니다.';
+    let solutionGuide = '';
+
+    if (isInvalidClient) {
+      errorTitle = 'Google OAuth 보안 인증 실패 (invalid_client)';
+      errorMessage = 'Google OAuth 2.0 인증 서버에서 Client Secret(클라이언트 보안 비밀) 검증을 실패했습니다.';
+      solutionGuide = `
+        <div style="background:#FFF8F6; border:1px solid #FFD0C7; padding:16px; border-radius:6px; margin-top:16px; text-align:left;">
+          <h4 style="color:#D9381E; margin-top:0; margin-bottom:8px; font-size:14px;">🛠️ 원인 및 해결 방법 (Render.com 환경변수 확인)</h4>
+          <ol style="margin:0; padding-left:20px; color:#444; font-size:13px; line-height:1.6;">
+            <li><strong>원인:</strong> Render.com 대시보드의 <code>GOOGLE_CLIENT_SECRET</code> 환경변수 값에 마스킹 문자열(<code>****4uC9</code> 등)이 들어가 있거나, Google Cloud Console의 보안 비밀과 일치하지 않습니다.</li>
+            <li><strong>해결 단계 1:</strong> <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0066CC;">Google Cloud Console API &amp; 서비스 -&gt; 사용자 인증 정보</a>에 접속합니다.</li>
+            <li><strong>해결 단계 2:</strong> 해당 OAuth 2.0 클라이언트 ID의 <strong>'클라이언트 보안 비밀(Client Secret)'</strong> 전체 문자열을 다시 복사합니다.</li>
+            <li><strong>해결 단계 3:</strong> Render.com 대시보드 <strong>Environment</strong> 탭에서 <code>GOOGLE_CLIENT_SECRET</code>에 별표(<code>*</code>) 없이 전체 원본 비밀번호를 수정 후 저장합니다.</li>
+          </ol>
+        </div>
+      `;
+    }
+
+    res.status(500).send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${errorTitle}</title>
+        </head>
+        <body style="background:#F5F2ED; font-family:sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
+          <div style="background:white; max-width:560px; width:100%; padding:30px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.12); text-align:center;">
+            <div style="font-size:36px; margin-bottom:12px;">⚠️</div>
+            <h3 style="color:#D9381E; margin-top:0; margin-bottom:10px;">${errorTitle}</h3>
+            <p style="color:#555; font-size:14px; background:#F8F9FA; padding:10px; border-radius:6px; font-family:monospace; word-break:break-all;">
+              오류 메시지: ${errorMessage}
+            </p>
+            ${solutionGuide}
+            <div style="margin-top:20px; display:flex; gap:10px; justify-content:center;">
+              <button onclick="window.close()" style="background:#3A5A40; color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px;">
+                창 닫기
+              </button>
+            </div>
+          </div>
+        </body>
+      </html>
+    `);
   }
 };
 
