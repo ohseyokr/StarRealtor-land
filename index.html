@@ -638,11 +638,39 @@
                     <input type="text" id="new-title" placeholder="예: 강원도 평창군 대관령면 수하리 임야 매물" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-black/60 mb-1">소재지 주소 (대한민국 전지역)</label>
-                        <input type="text" id="new-address" placeholder="예: 강원특별자치도 평창군..." required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-black/60 font-medium">소재지 주소 및 토지 지번 (대한민국 전지역)</label>
+                        <button type="button" onclick="lookupPublicLandData()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white text-[10px] font-bold px-2.5 py-1 flex items-center gap-1 transition">
+                            <i class="fa-solid fa-database text-yellow-300"></i> 3대 공공 OPEN API 조회 및 자동연동
+                        </button>
                     </div>
+                    <input type="text" id="new-address" placeholder="예: 강원특별자치도 평창군 대관령면 수하리 45-2" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <!-- Public Open API Result Preview Banner -->
+                <div id="public-api-result-box" class="hidden bg-[#F5F2ED] border border-[#3A5A40]/30 p-3 space-y-2 text-[11px]">
+                    <div class="flex items-center justify-between font-bold text-[#3A5A40]">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-green-600"></i> 3대 대한민국 공공 API 실시간 자동 연동 완료</span>
+                        <span id="pnu-badge" class="bg-white border border-[#3A5A40]/30 text-[#1A1A1A] text-[9px] px-2 py-0.5">PNU: -</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-[10px] bg-white p-2 border border-black/10">
+                        <div>
+                            <strong class="text-[#3A5A40] block">1. 국토교통부 API</strong>
+                            <span id="api-molit-zoning" class="text-black/80 font-medium">-</span>
+                        </div>
+                        <div>
+                            <strong class="text-[#3A5A40] block">2. 토지이음 API</strong>
+                            <span id="api-eum-reg" class="text-black/80 font-medium">건폐율 40% / 용적률 100%</span>
+                        </div>
+                        <div>
+                            <strong class="text-[#3A5A40] block">3. 브이월드 API</strong>
+                            <span id="api-vworld-price" class="text-black/80 font-medium">공시지가: -</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-black/60 mb-1">공간정보법 28개 지목 선택</label>
                         <select id="new-jimok" class="w-full bg-white border border-black/15 p-2.5 text-[#3A5A40] font-bold focus:outline-none">
@@ -658,6 +686,10 @@
                             <option value="천">천 (하천)</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="block text-black/60 mb-1">용도지역</label>
+                        <input type="text" id="new-zoning" placeholder="예: 보전관리지역, 계획관리지역" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-2 gap-3">
@@ -671,15 +703,9 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-black/60 mb-1">용도지역</label>
-                        <input type="text" id="new-zoning" placeholder="예: 보전관리지역, 계획관리지역" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
-                    </div>
-                    <div>
-                        <label class="block text-black/60 mb-1">도로 접합 상태</label>
-                        <input type="text" id="new-road" placeholder="예: 2차선 포장도로 접함" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
-                    </div>
+                <div>
+                    <label class="block text-black/60 mb-1">도로 접합 상태</label>
+                    <input type="text" id="new-road" placeholder="예: 2차선 포장도로 접함" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
                 </div>
 
                 <div>
@@ -691,6 +717,38 @@
                     매물 검증 및 수집 등록
                 </button>
             </form>
+        </div>
+    </div>
+
+    <!-- MODAL 6: MEMBER CART LAND USE FREE REVIEW MODAL (3대 공공 API 분석서) -->
+    <div id="land-use-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-2xl p-6 space-y-5 relative max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-file-contract text-[#3A5A40]"></i> 관심 토지이용계획 무상 상세 분석서 (3대 공공 API)
+                </h3>
+                <button onclick="closeModal('land-use-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Free Member Benefit Badge -->
+            <div class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 p-3 text-xs flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-gift text-[#3A5A40] text-sm"></i>
+                    <span class="text-[#3A5A40] font-bold">로그인 Member 전용 혜택: 관심 매물(장바구니) 담김 토지이용계획 100% 무상 분석 열람중</span>
+                </div>
+                <span class="text-[10px] bg-[#3A5A40] text-white px-2 py-0.5 rounded font-bold">FREE REVIEW</span>
+            </div>
+
+            <div id="land-use-content" class="space-y-4 text-xs">
+                <!-- JS Populated -->
+            </div>
+
+            <div class="pt-3 border-t border-black/10 flex justify-between items-center">
+                <p class="text-[10px] text-black/50">* 본 정보는 국토교통부, 토지이음, 브이월드 오피셜 API와 실시간 융복합 연동된 정보입니다.</p>
+                <button onclick="closeModal('land-use-modal')" class="bg-[#3A5A40] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider">확인 완료</button>
+            </div>
         </div>
     </div>
 
@@ -1016,11 +1074,16 @@
                                     <span class="font-medium text-[#1A1A1A]">${item.zoning_district}</span>
                                 </div>
                             </div>
-                            <div class="pt-1 flex items-center justify-between text-[11px] text-black/50">
-                                <span>담당: ${item.assistant_nickname}</span>
-                                <span class="text-[#3A5A40] font-medium flex items-center gap-1">
-                                    <i class="fa-solid fa-lock text-[10px]"></i> 보안 뷰어
-                                </span>
+                            <div class="pt-1 flex items-center justify-between text-[10px]">
+                                <span class="text-black/50">담당: ${item.assistant_nickname}</span>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="event.stopPropagation(); openLandUseReviewModal('${item.listing_id}')" class="bg-[#3A5A40]/10 text-[#3A5A40] hover:bg-[#3A5A40] hover:text-white font-bold px-2 py-0.5 border border-[#3A5A40]/30 transition" title="관심매물 3대 공공 API 무상 분석">
+                                        무상 분석
+                                    </button>
+                                    <button onclick="event.stopPropagation(); openSecurePdfViewer('${item.listing_id}', 'LURIS')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-2 py-0.5 border border-stone-300 transition flex items-center gap-1" title="결제 및 미팅 완료 회원 전용 PDF">
+                                        <i class="fa-solid fa-file-pdf text-red-600"></i> PDF
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1138,8 +1201,166 @@
         }
 
         // -------------------------------------------------------------
-        // SHOPPING CART & PAYMENT & GOOGLE MEET BOOKING
+        // PUBLIC LAND OPEN API & LAND USE REVIEW & SECURE PDF FUNCTIONS
         // -------------------------------------------------------------
+        async function lookupPublicLandData() {
+            if (!currentUser) {
+                alert('공공 API 자동 조회를 실행하려면 먼저 로그인(Staff 또는 회원 계정)이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            const addrInput = document.getElementById('new-address');
+            const address = addrInput ? addrInput.value.trim() : '';
+
+            if (!address) {
+                alert('소재지 주소 또는 토지 지번을 입력한 후 3대 공공 OPEN API 조회를 실행해주세요.');
+                if (addrInput) addrInput.focus();
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/public-land-api/lookup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ address })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '공공 API 연동 실패');
+
+                // Fill UI
+                document.getElementById('pnu-badge').innerText = `PNU: ${data.pnu}`;
+                document.getElementById('api-molit-zoning').innerText = `${data.molit.zoning_district}`;
+                document.getElementById('api-eum-reg').innerText = `건폐율 ${data.land_eum.building_coverage_ratio} / 용적률 ${data.land_eum.floor_area_ratio}`;
+                document.getElementById('api-vworld-price').innerText = `공시지가: ${data.vworld.official_land_price_sqm.toLocaleString()}원/㎡`;
+
+                document.getElementById('new-zoning').value = data.molit.zoning_district;
+                const jimokSelect = document.getElementById('new-jimok');
+                if (jimokSelect && data.vworld.jimok_official) {
+                    jimokSelect.value = data.vworld.jimok_official;
+                }
+
+                document.getElementById('public-api-result-box').classList.remove('hidden');
+                alert(`✅ [국토교통부 + 토지이음 + 브이월드] 3대 대한민국 공공 API 정보 수신 완료!\n- PNU: ${data.pnu}\n- 용도지역: ${data.molit.zoning_district}\n- 개별공시지가: ${data.vworld.official_land_price_sqm.toLocaleString()} 원/㎡`);
+            } catch (err) {
+                alert(`[공공 API 조회 오류] ${err.message}`);
+            }
+        }
+
+        async function openLandUseReviewModal(listingId) {
+            if (!currentUser) {
+                alert('로그인한 회원에 한해 관심 매물의 토지이용계획 정보를 무상으로 리뷰할 수 있습니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/listings/${listingId}/land-use-review`, {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '토지이용계획 정보를 불러올 수 없습니다.');
+
+                const container = document.getElementById('land-use-content');
+                container.innerHTML = `
+                    <div class="bg-white p-4 border border-black/10 space-y-2">
+                        <div class="flex justify-between items-center text-[#3A5A40] font-bold text-sm">
+                            <span>${data.title}</span>
+                            <span class="bg-[#F5F2ED] text-black/70 text-[10px] px-2 py-0.5 border border-black/10">PNU: ${data.pnu}</span>
+                        </div>
+                        <p class="text-black/60 text-[11px]">${data.address}</p>
+                    </div>
+
+                    <!-- 3 PUBLIC APIS CARDS GRID -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <!-- 1. MOLIT API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-landmark"></i> 1. 국토교통부 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>용도지역:</strong> ${data.molit.zoning_district}</div>
+                                <div><strong>용도지구:</strong> ${data.molit.zoning_sub}</div>
+                                <p class="text-[10px] text-black/60 leading-tight pt-1">${data.molit.regulations}</p>
+                            </div>
+                        </div>
+
+                        <!-- 2. LAND-EUM API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-gavel"></i> 2. 토지이음 규제 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>건폐율:</strong> ${data.land_eum.coverage} | <strong>용적률:</strong> ${data.land_eum.far}</div>
+                                <div><strong>허용 건축:</strong> ${data.land_eum.allowed.join(', ')}</div>
+                                <div><strong>제한 대상:</strong> ${data.land_eum.restricted.join(', ')}</div>
+                            </div>
+                        </div>
+
+                        <!-- 3. V-WORLD API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-map"></i> 3. 브이월드 지도 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>공시지가:</strong> ${data.vworld.official_price_sqm.toLocaleString()} 원/㎡</div>
+                                <div><strong>공시지가 총액:</strong> 약 ${(data.vworld.estimated_official_total / 10000).toLocaleString()} 만원</div>
+                                <div><strong>지형 형상:</strong> ${data.vworld.shape}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- V-World Overlay Visual Map -->
+                    <div class="bg-[#1A1A1A] p-4 text-white text-center space-y-2 rounded border border-black/20">
+                        <div class="text-xs font-serif italic text-amber-300 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-[#3A5A40]"></i> V-World 연속지적도 & 토지이용계획도 WMS 레이어 융복합 오버레이
+                        </div>
+                        <div class="h-32 bg-emerald-900/30 border border-emerald-500/30 flex items-center justify-center text-[11px] text-emerald-200">
+                            [브이월드 2D/3D 지도 오버레이 레이어 가상 모듈 - 필지 경계선 및 규제선 바인딩 완료]
+                        </div>
+                    </div>
+                `;
+
+                openModal('land-use-modal');
+            } catch (err) {
+                alert(`[무상 리뷰 오류] ${err.message}`);
+            }
+        }
+
+        async function openSecurePdfViewer(listingId, docType = 'LURIS') {
+            if (!currentUser) {
+                alert('PDF 문서를 열람하려면 로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/pdf/secure-viewer?doc_type=${docType}&listing_id=${listingId}`, {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+
+                if (res.status === 403) {
+                    const data = await res.json();
+                    alert(data.error || '🔒 [보안 문서 열람 제한] Staff가 등록한 공식 토지 분석 PDF 문서는 상담료 결제 완료 및 Google Meet 화상 미팅 종료(COMPLETED) 후에만 리뷰 및 다운로드가 가능합니다.');
+                    return;
+                }
+
+                if (!res.ok) {
+                    alert('PDF 문서 요청 처리 중 오류가 발생했습니다.');
+                    return;
+                }
+
+                const blob = await res.blob();
+                const pdfUrl = URL.createObjectURL(blob);
+                window.open(pdfUrl, '_blank');
+            } catch (err) {
+                alert(`[PDF 보안 열람 오류] ${err.message}`);
+            }
+        }
         async function addToCartDirect(listingId) {
             if (!currentUser) {
                 alert('관심 매물을 담으려면 로그인이 필요합니다.');
@@ -1207,17 +1428,23 @@
                 } else {
                     items.forEach(c => {
                         list.innerHTML += `
-                            <div class="p-3 bg-[#F5F2ED] border border-black/5 flex justify-between items-center">
-                                <div>
+                            <div class="p-3 bg-[#F5F2ED] border border-black/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                <div class="space-y-1">
                                     <div class="font-serif italic text-sm text-[#1A1A1A]">${c.listing.title}</div>
-                                    <div class="text-[11px] text-black/50">${c.listing.address} (${c.listing.jimok_official})</div>
+                                    <div class="text-[11px] text-black/50">${c.listing.address} (지목: ${c.listing.jimok_official})</div>
                                     <div class="text-xs text-[#3A5A40] font-serif font-bold">${(c.listing.price / 100000000).toFixed(1)} 억원</div>
                                 </div>
-                                <div class="flex items-center space-x-2">
-                                    <button onclick="openBookingModalForListing('${c.listing.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[11px] px-3 py-1.5 uppercase transition">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <button onclick="openLandUseReviewModal('${c.listing.listing_id}')" class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 hover:bg-[#3A5A40] hover:text-white text-[#3A5A40] font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-gift"></i> 무상 토지이용계획 분석
+                                    </button>
+                                    <button onclick="openSecurePdfViewer('${c.listing.listing_id}', 'LURIS')" class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-file-pdf text-red-600"></i> 보안 PDF 리뷰
+                                    </button>
+                                    <button onclick="openBookingModalForListing('${c.listing.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[10px] px-2.5 py-1 uppercase transition">
                                         미팅 예약
                                     </button>
-                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1">
+                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심매물 삭제">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
