@@ -319,155 +319,244 @@ app.put('/api/config', authenticateToken, async (req, res) => {
 
 // 2. Auth - General Registration (회원가입)
 app.post('/api/auth/signup', async (req, res) => {
-  const { email, password, nickname, name, phone_number, role } = req.body;
+  try {
+    const { email, password, nickname, name, phone_number, role } = req.body;
 
-  if (!email || !password || !nickname) {
-    return res.status(400).json({ error: '이메일, 비밀번호, 별명은 필수 항목입니다.' });
-  }
-
-  const assignedRole = role && ['MEMBER', 'STAFF', 'OWNER', 'ADMIN'].includes(role) ? role : 'MEMBER';
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const userId = `u-${Date.now()}`;
-
-  // Check existing
-  if (usePg) {
-    try {
-      const existing = await pool.query('SELECT * FROM TB_USER WHERE email = $1', [email]);
-      if (existing.rows.length > 0) return res.status(400).json({ error: '이미 등록된 이메일 계정입니다.' });
-
-      await pool.query(
-        `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [userId, email, hashedPassword, nickname, name || nickname, phone_number || '', assignedRole]
-      );
-    } catch (e) {
-      console.error('DB signup error:', e);
+    if (!email || !password || !nickname) {
+      return res.status(400).json({ error: '이메일, 비밀번호, 별명은 필수 입력 항목입니다.' });
     }
-  } else {
-    if (inMemoryDB.users.some(u => u.email === email)) {
+
+    const normalizeEmail = email.trim().toLowerCase();
+    const assignedRole = role && ['MEMBER', 'STAFF', 'OWNER', 'ADMIN'].includes(role) ? role : 'MEMBER';
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const userId = `u-${Date.now()}`;
+
+    // Check existing in Memory
+    if (inMemoryDB.users.some(u => u.email.toLowerCase() === normalizeEmail)) {
       return res.status(400).json({ error: '이미 등록된 이메일 계정입니다.' });
     }
-    inMemoryDB.users.push({
+
+    // Check existing & Insert in PostgreSQL if enabled
+    if (usePg) {
+      try {
+        const existing = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
+        if (existing.rows.length > 0) {
+          return res.status(400).json({ error: '이미 등록된 이메일 계정입니다.' });
+        }
+
+        await pool.query(
+          `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [userId, normalizeEmail, hashedPassword, nickname, name || nickname, phone_number || '', assignedRole]
+        );
+      } catch (e) {
+        console.warn('PostgreSQL DB signup insert warning (falling back to memory state):', e.message);
+      }
+    }
+
+    const newUser = {
       user_id: userId,
-      email,
+      email: normalizeEmail,
       password_hash: hashedPassword,
       nickname,
       name: name || nickname,
       phone_number: phone_number || '',
       role: assignedRole,
       created_at: new Date().toISOString()
-    });
-  }
+    };
+    inMemoryDB.users.push(newUser);
 
-  const token = jwt.sign({ id: userId, email, role: assignedRole, nickname }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ success: true, token, role: assignedRole, nickname, user_id: userId });
+    const token = jwt.sign({ id: userId, email: normalizeEmail, role: assignedRole, nickname }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ success: true, token, role: assignedRole, nickname, email: normalizeEmail, user_id: userId });
+  } catch (err) {
+    console.error('Signup Exception:', err);
+    return res.status(500).json({ error: '회원가입 처리 중 서버 오류가 발생했습니다: ' + err.message });
+  }
 });
 
 // Auth - General Login (로그인)
 app.post('/api/auth/login', async (req, res) => {
-  const { email, password } = req.body;
-  let user = null;
-
-  if (usePg) {
-    try {
-      const result = await pool.query('SELECT * FROM TB_USER WHERE email = $1', [email]);
-      if (result.rows.length > 0) user = result.rows[0];
-    } catch (e) {
-      console.error('DB login query error:', e);
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ error: '이메일과 비밀번호를 모두 입력해주세요.' });
     }
+
+    const normalizeEmail = email.trim().toLowerCase();
+    let user = null;
+
+    if (usePg) {
+      try {
+        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
+        if (result.rows.length > 0) user = result.rows[0];
+      } catch (e) {
+        console.warn('PostgreSQL DB login query warning:', e.message);
+      }
+    }
+
+    if (!user) {
+      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
+    }
+
+    if (!user) {
+      return res.status(400).json({ error: '가입되지 않은 이메일 계정입니다.' });
+    }
+
+    const match = await bcrypt.compare(password, user.password_hash || '');
+    if (!match) {
+      return res.status(400).json({ error: '비밀번호가 일치하지 않습니다.' });
+    }
+
+    const token = jwt.sign(
+      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      role: user.role,
+      nickname: user.nickname,
+      email: user.email,
+      user_id: user.user_id
+    });
+  } catch (err) {
+    console.error('Login Exception:', err);
+    return res.status(500).json({ error: '로그인 처리 중 서버 오류가 발생했습니다: ' + err.message });
   }
-
-  if (!user) {
-    user = inMemoryDB.users.find(u => u.email === email);
-  }
-
-  if (!user) {
-    return res.status(400).json({ error: '가입되지 않은 이메일입니다.' });
-  }
-
-  const match = await bcrypt.compare(password, user.password_hash || '');
-  if (!match) {
-    return res.status(400).json({ error: '비밀번호가 일치하지 않습니다.' });
-  }
-
-  const token = jwt.sign(
-    { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  res.json({ success: true, token, role: user.role, nickname: user.nickname, user_id: user.user_id });
 });
 
 // Auth - Google OAuth Login
 app.post('/api/auth/google', async (req, res) => {
-  const { credential, email: googleEmail, name: googleName } = req.body;
-  let targetEmail = googleEmail;
-  let targetName = googleName || 'Google User';
+  try {
+    const { credential, email: googleEmail, name: googleName } = req.body;
+    let targetEmail = googleEmail;
+    let targetName = googleName || 'Google User';
 
-  // If credential token provided, verify with Google Auth Library
-  if (credential) {
-    try {
-      const ticket = await oauth2Client.verifyIdToken({
-        idToken: credential,
-        audience: process.env.GOOGLE_CLIENT_ID
-      });
-      const payload = ticket.getPayload();
-      targetEmail = payload.email;
-      targetName = payload.name;
-    } catch (err) {
-      console.warn('Google ID Token verification failed, using client fallback:', err.message);
+    // If credential token provided, verify with Google Auth Library
+    if (credential) {
+      try {
+        const ticket = await oauth2Client.verifyIdToken({
+          idToken: credential,
+          audience: process.env.GOOGLE_CLIENT_ID
+        });
+        const payload = ticket.getPayload();
+        targetEmail = payload.email;
+        targetName = payload.name || targetName;
+      } catch (err) {
+        console.warn('Google ID Token verification failed, using client fallback:', err.message);
+      }
     }
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+      return res.status(400).json({ error: '유효한 Google 이메일 계정 정보가 전달되지 않았습니다.' });
+    }
+
+    const normalizeEmail = targetEmail.trim().toLowerCase();
+
+    // Check if normalizeEmail matches Admin_ID environment variable
+    const envAdminEmail = process.env.Admin_ID || process.env.ADMIN_ID;
+    let role = 'MEMBER';
+
+    if (envAdminEmail && normalizeEmail === envAdminEmail.trim().toLowerCase()) {
+      role = 'ADMIN';
+    }
+
+    let user = null;
+
+    if (usePg) {
+      try {
+        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
+        if (result.rows.length > 0) user = result.rows[0];
+      } catch (e) {
+        console.warn('PostgreSQL DB google login query warning:', e.message);
+      }
+    }
+
+    if (!user) {
+      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
+    }
+
+    if (!user) {
+      const userId = `u-g-${Date.now()}`;
+      user = {
+        user_id: userId,
+        email: normalizeEmail,
+        password_hash: '',
+        nickname: targetName,
+        name: targetName,
+        phone_number: '010-0000-0000',
+        role: role,
+        created_at: new Date().toISOString()
+      };
+      inMemoryDB.users.push(user);
+
+      if (usePg) {
+        try {
+          await pool.query(
+            `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, normalizeEmail, '', targetName, targetName, '010-0000-0000', role]
+          );
+        } catch (e) {
+          console.warn('PostgreSQL DB google user insert warning:', e.message);
+        }
+      }
+    } else {
+      if (role === 'ADMIN' && user.role !== 'ADMIN') {
+        user.role = 'ADMIN';
+        if (usePg) {
+          try {
+            await pool.query('UPDATE TB_USER SET role = $1 WHERE user_id = $2', ['ADMIN', user.user_id]);
+          } catch (e) {
+            console.warn('PostgreSQL DB update admin role warning:', e.message);
+          }
+        }
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return res.json({
+      success: true,
+      token,
+      role: user.role,
+      nickname: user.nickname,
+      email: user.email,
+      user_id: user.user_id
+    });
+  } catch (err) {
+    console.error('Google Auth Exception:', err);
+    return res.status(500).json({ error: 'Google 로그인 처리 중 오류가 발생했습니다: ' + err.message });
   }
-
-  if (!targetEmail) {
-    return res.status(400).json({ error: 'Google 인증 정보가 유효하지 않습니다.' });
-  }
-
-  // Check if targetEmail matches Admin_ID environment variable
-  const envAdminEmail = process.env.Admin_ID || process.env.ADMIN_ID;
-  let role = 'MEMBER';
-
-  if (envAdminEmail && targetEmail.toLowerCase() === envAdminEmail.toLowerCase()) {
-    role = 'ADMIN';
-  }
-
-  let user = inMemoryDB.users.find(u => u.email.toLowerCase() === targetEmail.toLowerCase());
-
-  if (!user) {
-    user = {
-      user_id: `u-g-${Date.now()}`,
-      email: targetEmail,
-      password_hash: '',
-      nickname: targetName,
-      name: targetName,
-      phone_number: '010-0000-0000',
-      role: role,
-      created_at: new Date().toISOString()
-    };
-    inMemoryDB.users.push(user);
-  } else if (role === 'ADMIN' && user.role !== 'ADMIN') {
-    user.role = 'ADMIN';
-  }
-
-  const token = jwt.sign(
-    { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
-    JWT_SECRET,
-    { expiresIn: '7d' }
-  );
-
-  res.json({ success: true, token, role: user.role, nickname: user.nickname, email: user.email, user_id: user.user_id });
 });
 
 // Auth - Get current user profile
 app.get('/api/auth/me', authenticateToken, (req, res) => {
-  const user = inMemoryDB.users.find(u => u.user_id === req.user.id) || {
-    user_id: req.user.id,
-    email: req.user.email,
-    role: req.user.role,
-    nickname: req.user.nickname
-  };
-  res.json({ user });
+  let user = inMemoryDB.users.find(u => u.user_id === req.user.id || u.email.toLowerCase() === (req.user.email || '').toLowerCase());
+  if (!user) {
+    user = {
+      user_id: req.user.id,
+      email: req.user.email,
+      role: req.user.role,
+      nickname: req.user.nickname
+    };
+  }
+  return res.json({
+    user: {
+      user_id: user.user_id,
+      email: user.email,
+      role: user.role,
+      nickname: user.nickname,
+      name: user.name || user.nickname,
+      phone_number: user.phone_number || ''
+    }
+  });
 });
 
 // 3. Land Listings Endpoints
