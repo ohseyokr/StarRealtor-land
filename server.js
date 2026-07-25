@@ -427,7 +427,200 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Auth - Google OAuth Login
+// Auth - Google OAuth Client Config Check
+app.get('/api/auth/google/config', (req, res) => {
+  const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
+  res.json({
+    googleClientId,
+    hasOAuth: !!googleClientId && googleClientId !== 'dummy_client_id'
+  });
+});
+
+// Auth - Google OAuth2.0 Authorization URL Construction
+app.get('/api/auth/google/url', (req, res) => {
+  const clientOrigin = req.query.origin || `${req.protocol}://${req.get('host')}`;
+  const redirectUri = `${clientOrigin}/api/auth/google/callback`;
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  if (!clientId || clientId === 'dummy_client_id') {
+    return res.status(400).json({
+      error: 'Google OAuth Client ID가 서버 환경변수(GOOGLE_CLIENT_ID)에 준비되지 않았습니다.'
+    });
+  }
+
+  const client = new OAuth2Client(
+    clientId,
+    process.env.GOOGLE_CLIENT_SECRET || '',
+    redirectUri
+  );
+
+  const authUrl = client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/userinfo.email'
+    ],
+    prompt: 'select_account'
+  });
+
+  res.json({ url: authUrl, redirectUri });
+});
+
+// Auth - Google OAuth2.0 Callback Handler
+const handleGoogleCallback = async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) {
+      return res.status(400).send('OAuth 인가 코드가 전달되지 않았습니다.');
+    }
+
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
+
+    const client = new OAuth2Client(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      redirectUri
+    );
+
+    const { tokens } = await client.getToken(code);
+    client.setCredentials(tokens);
+
+    // Verify ID Token or fetch UserInfo
+    let targetEmail = '';
+    let targetName = '';
+
+    if (tokens.id_token) {
+      const ticket = await client.verifyIdToken({
+        idToken: tokens.id_token,
+        audience: process.env.GOOGLE_CLIENT_ID
+      });
+      const payload = ticket.getPayload();
+      targetEmail = payload.email;
+      targetName = payload.name || payload.given_name || 'Google User';
+    } else {
+      const userinfoRes = await client.request({
+        url: 'https://www.googleapis.com/oauth2/v3/userinfo'
+      });
+      targetEmail = userinfoRes.data.email;
+      targetName = userinfoRes.data.name || 'Google User';
+    }
+
+    if (!targetEmail) {
+      return res.status(400).send('Google 이메일 정보를 확인할 수 없습니다.');
+    }
+
+    const normalizeEmail = targetEmail.trim().toLowerCase();
+    const envAdminEmail = process.env.Admin_ID || process.env.ADMIN_ID;
+    let role = 'MEMBER';
+
+    if (envAdminEmail && normalizeEmail === envAdminEmail.trim().toLowerCase()) {
+      role = 'ADMIN';
+    }
+
+    let user = null;
+    if (usePg) {
+      try {
+        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
+        if (result.rows.length > 0) user = result.rows[0];
+      } catch (e) {
+        console.warn('PostgreSQL DB google callback query warning:', e.message);
+      }
+    }
+
+    if (!user) {
+      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
+    }
+
+    if (!user) {
+      const userId = `u-g-${Date.now()}`;
+      user = {
+        user_id: userId,
+        email: normalizeEmail,
+        password_hash: '',
+        nickname: targetName,
+        name: targetName,
+        phone_number: '010-0000-0000',
+        role: role,
+        created_at: new Date().toISOString()
+      };
+      inMemoryDB.users.push(user);
+
+      if (usePg) {
+        try {
+          await pool.query(
+            `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            [userId, normalizeEmail, '', targetName, targetName, '010-0000-0000', role]
+          );
+        } catch (e) {
+          console.warn('PostgreSQL DB user insert warning:', e.message);
+        }
+      }
+    } else if (role === 'ADMIN' && user.role !== 'ADMIN') {
+      user.role = 'ADMIN';
+      if (usePg) {
+        try {
+          await pool.query('UPDATE TB_USER SET role = $1 WHERE user_id = $2', ['ADMIN', user.user_id]);
+        } catch (e) {
+          console.warn('PostgreSQL DB update admin role warning:', e.message);
+        }
+      }
+    }
+
+    const token = jwt.sign(
+      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const authData = JSON.stringify({
+      type: 'GOOGLE_AUTH_SUCCESS',
+      token,
+      role: user.role,
+      nickname: user.nickname,
+      email: user.email,
+      user_id: user.user_id
+    });
+
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Google OAuth Login</title></head>
+        <body style="background:#F5F2ED; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
+          <div style="background:white; padding:30px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1); text-align:center;">
+            <h3 style="color:#3A5A40; margin-top:0;">Google OAuth 로그인 연동 성공</h3>
+            <p style="color:#555; font-size:14px;">계정: <strong>${user.email}</strong> (${user.role} 권한)</p>
+            <p style="color:#888; font-size:12px;">잠시 후 창이 닫히고 메인 화면으로 이동합니다...</p>
+          </div>
+          <script>
+            const authData = ${authData};
+            if (window.opener) {
+              window.opener.postMessage(authData, '*');
+              window.close();
+            } else {
+              localStorage.setItem('proptech_token', authData.token);
+              localStorage.setItem('proptech_role', authData.role);
+              localStorage.setItem('proptech_nickname', authData.nickname);
+              localStorage.setItem('proptech_email', authData.email);
+              localStorage.setItem('proptech_user_id', authData.user_id);
+              window.location.href = '/';
+            }
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('Google OAuth Callback Exception:', err);
+    res.status(500).send(`Google OAuth 로그인 오류: ${err.message}`);
+  }
+};
+
+app.get('/api/auth/google/callback', handleGoogleCallback);
+app.get('/api/auth/google/callback/', handleGoogleCallback);
+
+// Auth - Google OAuth Login (POST handler for ID Tokens / Fallback)
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { credential, email: googleEmail, name: googleName } = req.body;
