@@ -1,1424 +1,2209 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import pg from 'pg';
-import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-import multer from 'multer';
-import { S3Client } from '@aws-sdk/client-s3';
-import { OAuth2Client } from 'google-auth-library';
-import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
-
-dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const app = express();
-app.set('trust proxy', true);
-const PORT = 3000;
-
-app.use(cors());
-app.use(express.json());
-
-const JWT_SECRET = process.env.JWT_SECRET || 'starrealtor_land_jwt_secret_key_2026';
-
-// Helper function to get consistent OAuth Redirect URI
-const getRedirectUri = (req) => {
-  if (process.env.APP_URL && process.env.APP_URL.trim()) {
-    const cleanAppUrl = process.env.APP_URL.trim().replace(/\/+$/, '');
-    return `${cleanAppUrl}/api/auth/google/callback`;
-  }
-  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
-  const host = req.get('host');
-  return `${protocol}://${host}/api/auth/google/callback`;
-};
-
-// Hybrid Database Setup (PostgreSQL Pool with fallback to in-memory store)
-const { Pool } = pg;
-let pool = null;
-let usePg = false;
-
-if (process.env.DATABASE_URL) {
-  try {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('localhost') ? false : { rejectUnauthorized: false }
-    });
-    pool.on('error', (err) => {
-      console.warn('⚠️ PostgreSQL Pool idle client error (fallback to in-memory):', err.message);
-    });
-    usePg = true;
-    console.log('🔗 Configured PostgreSQL pool via DATABASE_URL');
-  } catch (err) {
-    console.warn('⚠️ Could not initialize PostgreSQL pool, falling back to in-memory DB:', err.message);
-  }
-}
-
-// In-Memory Database for local preview / standalone usage
-const inMemoryDB = {
-  config: {
-    config_id: '1',
-    office_name: '스타공인중개사사무소',
-    owner_name: '홍길동',
-    address: '서울특별시 서초구 반포대로 100, 4층',
-    business_reg_num: '120-12-12345',
-    license_num: '제11650-2026-00001호',
-    mobile_phone: '010-9876-5432',
-    landline_phone: '02-1234-5678',
-    fax_num: '02-1234-5679',
-    email: 'owner@starrealtor-land.co.kr'
-  },
-  users: [
-    {
-      user_id: 'u-admin-1',
-      email: process.env.Admin_ID || process.env.ADMIN_ID || 'ohseyokr@gmail.com',
-      password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', // admin123
-      nickname: '최고관리자',
-      name: '시스템관리자',
-      phone_number: '010-1111-2222',
-      role: 'ADMIN',
-      created_at: new Date().toISOString()
-    },
-    {
-      user_id: 'u-owner-1',
-      email: 'owner@starrealtor-land.co.kr',
-      password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '대표중개사',
-      name: '홍길동',
-      phone_number: '010-9876-5432',
-      role: 'OWNER',
-      created_at: new Date().toISOString()
-    },
-    {
-      user_id: 'u-staff-1',
-      email: 'staff1@gmail.com',
-      password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '김보조원',
-      name: '김철수',
-      phone_number: '010-3333-4444',
-      role: 'STAFF',
-      created_at: new Date().toISOString()
-    },
-    {
-      user_id: 'u-member-1',
-      email: 'member1@gmail.com',
-      password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '토지투자왕',
-      name: '이영희',
-      phone_number: '010-5555-6666',
-      role: 'MEMBER',
-      created_at: new Date().toISOString()
-    }
-  ],
-  listings: [
-    {
-      listing_id: 'lnd-101',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '강원도 평창군 대관령면 수하리 청정 임야 매물',
-      address: '강원특별자치도 평창군 대관령면 수하리 산 45-2',
-      jimok_official: '임',
-      area_sqm: 3305,
-      price: 350000000,
-      zoning_district: '보전관리지역',
-      road_access: '2차선 포장도로 접합',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    },
-    {
-      listing_id: 'lnd-102',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)',
-      address: '충청남도 당진시 신평면 금천리 123-5',
-      jimok_official: '전',
-      area_sqm: 1652,
-      price: 180000000,
-      zoning_district: '계획관리지역',
-      road_access: '4m 마을 농로 구거 접함',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    },
-    {
-      listing_id: 'lnd-103',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)',
-      address: '경기도 용인시 처인구 양지면 양지리 78-1',
-      jimok_official: '대',
-      area_sqm: 660,
-      price: 820000000,
-      zoning_district: '제1종일반주거지역',
-      road_access: '6m 지적도상 도로 완비',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    },
-    {
-      listing_id: 'lnd-104',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '(임야) 경기도 포천시 창수면 가양리 369-6',
-      address: '경기도 포천시 창수면 가양리 369-6',
-      jimok_official: '임',
-      area_sqm: 4958,
-      price: 290000000,
-      zoning_district: '계획관리지역',
-      road_access: '4m 포장도로 접함',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    },
-    {
-      listing_id: 'lnd-105',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '(대지) 경기도 양주시 고암동 603-7',
-      address: '경기도 양주시 고암동 603-7',
-      jimok_official: '대',
-      area_sqm: 495,
-      price: 650000000,
-      zoning_district: '제1종일반주거지역',
-      road_access: '6m 진입도로 완비',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    },
-    {
-      listing_id: 'lnd-106',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '(공장용지) 경기도 포천시 내촌면 마명리 337',
-      address: '경기도 포천시 내촌면 마명리 337',
-      jimok_official: '장',
-      area_sqm: 2314,
-      price: 1250000000,
-      zoning_district: '계획관리지역',
-      road_access: '8m 대로변 접함',
-      youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-      doc_luris_pdf_url: '/sample-luris.pdf',
-      doc_ledger_pdf_url: '/sample-ledger.pdf',
-      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
-      listing_status: 'ACTIVE',
-      created_at: new Date().toISOString()
-    }
-  ],
-  carts: [
-    {
-      cart_id: 'c-1',
-      member_id: 'u-member-1',
-      listing_id: 'lnd-101',
-      added_at: new Date().toISOString()
-    }
-  ],
-  meetings: [
-    {
-      meeting_id: 'm-101',
-      listing_id: 'lnd-101',
-      listing_title: '강원도 평창군 대관령면 수하리 청정 임야 매물',
-      member_id: 'u-member-1',
-      member_nickname: '토지투자왕',
-      member_email: 'member1@gmail.com',
-      member_phone: '010-5555-6666',
-      assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      assistant_phone: '010-3333-4444',
-      meet_link: 'https://meet.google.com/abc-defg-hij',
-      start_time: '2026-08-01T14:00',
-      status: 'CONFIRMED', // CONFIRMED, COMPLETED, CANCELLED_REFUNDED
-      amount: 50000,
-      imp_uid: 'imp_sample_99120',
-      created_at: new Date().toISOString()
-    }
-  ]
-};
-
-// Google OAuth Client setup
-const oauth2Client = new OAuth2Client(
-  process.env.GOOGLE_CLIENT_ID || 'dummy_client_id',
-  process.env.GOOGLE_CLIENT_SECRET || 'dummy_client_secret'
-);
-
-// Auth Token Verification Middleware
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (!token) return res.status(401).json({ error: '로그인이 필요합니다.' });
-
-  jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: '유효하지 않거나 만료된 토큰입니다.' });
-    req.user = user;
-    next();
-  });
-};
-
-// Optional Token Middleware (Attaches user if logged in, doesn't block guests)
-const optionalToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
-  if (token) {
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (!err) req.user = user;
-      next();
-    });
-  } else {
-    next();
-  }
-};
-
-// -------------------------------------------------------------
-// API ROUTES
-// -------------------------------------------------------------
-
-// 1. Get Owner Legal Metadata Config (Header & Footer)
-app.get('/api/config', async (req, res) => {
-  if (usePg) {
-    try {
-      const result = await pool.query('SELECT * FROM TB_OWNER_CONFIG LIMIT 1');
-      if (result.rows.length > 0) return res.json(result.rows[0]);
-    } catch (e) {
-      console.warn('DB query config warning (falling back to inMemoryDB):', e.message);
-    }
-  }
-  res.json(inMemoryDB.config);
-});
-
-// Update Owner Legal Metadata Config (Admin Only)
-app.put('/api/config', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
-  }
-  const { office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email } = req.body;
-
-  if (usePg) {
-    try {
-      await pool.query(
-        `UPDATE TB_OWNER_CONFIG SET 
-          office_name = $1, owner_name = $2, address = $3, business_reg_num = $4, 
-          license_num = $5, mobile_phone = $6, landline_phone = $7, fax_num = $8, email = $9, updated_at = NOW()`,
-        [office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email]
-      );
-    } catch (e) {
-      console.error('DB update error on config:', e);
-    }
-  }
-
-  inMemoryDB.config = {
-    ...inMemoryDB.config,
-    office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email
-  };
-
-  res.json({ success: true, config: inMemoryDB.config });
-});
-
-// 2. Auth - General Registration (회원가입)
-app.post('/api/auth/signup', async (req, res) => {
-  try {
-    const { email, password, nickname, name, phone_number, role } = req.body;
-
-    if (!email || !password || !nickname) {
-      return res.status(400).json({ error: '이메일, 비밀번호, 별명은 필수 입력 항목입니다.' });
-    }
-
-    const normalizeEmail = email.trim().toLowerCase();
-    const assignedRole = role && ['MEMBER', 'STAFF', 'OWNER', 'ADMIN'].includes(role) ? role : 'MEMBER';
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const userId = `u-${Date.now()}`;
-
-    // Check existing in Memory
-    if (inMemoryDB.users.some(u => u.email.toLowerCase() === normalizeEmail)) {
-      return res.status(400).json({ error: '이미 등록된 이메일 계정입니다.' });
-    }
-
-    // Check existing & Insert in PostgreSQL if enabled
-    if (usePg) {
-      try {
-        const existing = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
-        if (existing.rows.length > 0) {
-          return res.status(400).json({ error: '이미 등록된 이메일 계정입니다.' });
-        }
-
-        await pool.query(
-          `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [userId, normalizeEmail, hashedPassword, nickname, name || nickname, phone_number || '', assignedRole]
-        );
-      } catch (e) {
-        console.warn('PostgreSQL DB signup insert warning (falling back to memory state):', e.message);
-      }
-    }
-
-    const newUser = {
-      user_id: userId,
-      email: normalizeEmail,
-      password_hash: hashedPassword,
-      nickname,
-      name: name || nickname,
-      phone_number: phone_number || '',
-      role: assignedRole,
-      created_at: new Date().toISOString()
-    };
-    inMemoryDB.users.push(newUser);
-
-    const token = jwt.sign({ id: userId, email: normalizeEmail, role: assignedRole, nickname }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ success: true, token, role: assignedRole, nickname, email: normalizeEmail, user_id: userId });
-  } catch (err) {
-    console.error('Signup Exception:', err);
-    return res.status(500).json({ error: '회원가입 처리 중 서버 오류가 발생했습니다: ' + err.message });
-  }
-});
-
-// Auth - General Login (로그인)
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ error: '이메일과 비밀번호를 모두 입력해주세요.' });
-    }
-
-    const normalizeEmail = email.trim().toLowerCase();
-    let user = null;
-
-    if (usePg) {
-      try {
-        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
-        if (result.rows.length > 0) user = result.rows[0];
-      } catch (e) {
-        console.warn('PostgreSQL DB login query warning:', e.message);
-      }
-    }
-
-    if (!user) {
-      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
-    }
-
-    if (!user) {
-      return res.status(400).json({ error: '가입되지 않은 이메일 계정입니다.' });
-    }
-
-    const match = await bcrypt.compare(password, user.password_hash || '');
-    if (!match) {
-      return res.status(400).json({ error: '비밀번호가 일치하지 않습니다.' });
-    }
-
-    const token = jwt.sign(
-      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.json({
-      success: true,
-      token,
-      role: user.role,
-      nickname: user.nickname,
-      email: user.email,
-      user_id: user.user_id
-    });
-  } catch (err) {
-    console.error('Login Exception:', err);
-    return res.status(500).json({ error: '로그인 처리 중 서버 오류가 발생했습니다: ' + err.message });
-  }
-});
-
-// Auth - Google OAuth Client Config Check
-app.get('/api/auth/google/config', (req, res) => {
-  const googleClientId = process.env.GOOGLE_CLIENT_ID || '';
-  res.json({
-    googleClientId,
-    hasOAuth: !!googleClientId && googleClientId !== 'dummy_client_id'
-  });
-});
-
-// Auth - Google OAuth2.0 Authorization URL Construction
-app.get('/api/auth/google/url', (req, res) => {
-  const redirectUri = getRedirectUri(req);
-
-  const clientId = process.env.GOOGLE_CLIENT_ID;
-  if (!clientId || clientId === 'dummy_client_id') {
-    return res.status(400).json({
-      error: 'Google OAuth Client ID가 서버 환경변수(GOOGLE_CLIENT_ID)에 준비되지 않았습니다.'
-    });
-  }
-
-  const client = new OAuth2Client(
-    clientId,
-    process.env.GOOGLE_CLIENT_SECRET || '',
-    redirectUri
-  );
-
-  const authUrl = client.generateAuthUrl({
-    access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email'
-    ],
-    prompt: 'select_account'
-  });
-
-  res.json({ url: authUrl, redirectUri });
-});
-
-// Auth - Google OAuth2.0 Callback Handler
-const handleGoogleCallback = async (req, res) => {
-  try {
-    const { code } = req.query;
-    if (!code) {
-      return res.status(400).send('OAuth 인가 코드가 전달되지 않았습니다.');
-    }
-
-    const redirectUri = getRedirectUri(req);
-
-    const client = new OAuth2Client(
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET,
-      redirectUri
-    );
-
-    const { tokens } = await client.getToken(code);
-    client.setCredentials(tokens);
-
-    // Verify ID Token or fetch UserInfo
-    let targetEmail = '';
-    let targetName = '';
-
-    if (tokens.id_token) {
-      const ticket = await client.verifyIdToken({
-        idToken: tokens.id_token,
-        audience: process.env.GOOGLE_CLIENT_ID
-      });
-      const payload = ticket.getPayload();
-      targetEmail = payload.email;
-      targetName = payload.name || payload.given_name || 'Google User';
-    } else {
-      const userinfoRes = await client.request({
-        url: 'https://www.googleapis.com/oauth2/v3/userinfo'
-      });
-      targetEmail = userinfoRes.data.email;
-      targetName = userinfoRes.data.name || 'Google User';
-    }
-
-    if (!targetEmail) {
-      return res.status(400).send('Google 이메일 정보를 확인할 수 없습니다.');
-    }
-
-    const normalizeEmail = targetEmail.trim().toLowerCase();
-    const envAdminEmail = process.env.Admin_ID || process.env.ADMIN_ID;
-    let role = 'MEMBER';
-
-    if (envAdminEmail && normalizeEmail === envAdminEmail.trim().toLowerCase()) {
-      role = 'ADMIN';
-    }
-
-    let user = null;
-    if (usePg) {
-      try {
-        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
-        if (result.rows.length > 0) user = result.rows[0];
-      } catch (e) {
-        console.warn('PostgreSQL DB google callback query warning:', e.message);
-      }
-    }
-
-    if (!user) {
-      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
-    }
-
-    if (!user) {
-      const userId = `u-g-${Date.now()}`;
-      user = {
-        user_id: userId,
-        email: normalizeEmail,
-        password_hash: '',
-        nickname: targetName,
-        name: targetName,
-        phone_number: '010-0000-0000',
-        role: role,
-        created_at: new Date().toISOString()
-      };
-      inMemoryDB.users.push(user);
-
-      if (usePg) {
-        try {
-          await pool.query(
-            `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [userId, normalizeEmail, '', targetName, targetName, '010-0000-0000', role]
-          );
-        } catch (e) {
-          console.warn('PostgreSQL DB user insert warning:', e.message);
-        }
-      }
-    } else if (role === 'ADMIN' && user.role !== 'ADMIN') {
-      user.role = 'ADMIN';
-      if (usePg) {
-        try {
-          await pool.query('UPDATE TB_USER SET role = $1 WHERE user_id = $2', ['ADMIN', user.user_id]);
-        } catch (e) {
-          console.warn('PostgreSQL DB update admin role warning:', e.message);
-        }
-      }
-    }
-
-    const token = jwt.sign(
-      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    const authData = JSON.stringify({
-      type: 'GOOGLE_AUTH_SUCCESS',
-      token,
-      role: user.role,
-      nickname: user.nickname,
-      email: user.email,
-      user_id: user.user_id
-    });
-
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head><title>Google OAuth Login</title></head>
-        <body style="background:#F5F2ED; font-family:sans-serif; display:flex; align-items:center; justify-content:center; height:100vh; margin:0;">
-          <div style="background:white; padding:30px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.1); text-align:center;">
-            <h3 style="color:#3A5A40; margin-top:0;">Google OAuth 로그인 연동 성공</h3>
-            <p style="color:#555; font-size:14px;">계정: <strong>${user.email}</strong> (${user.role} 권한)</p>
-            <p style="color:#888; font-size:12px;">잠시 후 창이 닫히고 메인 화면으로 이동합니다...</p>
-          </div>
-          <script>
-            const authData = ${authData};
-            if (window.opener) {
-              window.opener.postMessage(authData, '*');
-              window.close();
-            } else {
-              localStorage.setItem('proptech_token', authData.token);
-              localStorage.setItem('proptech_role', authData.role);
-              localStorage.setItem('proptech_nickname', authData.nickname);
-              localStorage.setItem('proptech_email', authData.email);
-              localStorage.setItem('proptech_user_id', authData.user_id);
-              window.location.href = '/';
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StarRealtor Land - 스타공인중개사 토지 중개 & 360° VR / 보안 뷰어 플랫폼</title>
+    <!-- Google Identity Services SDK -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        editorial: {
+                            bg: '#FDFCFB',
+                            stone: '#F5F2ED',
+                            forest: '#3A5A40',
+                            forestDark: '#2A422F',
+                            charcoal: '#1A1A1A',
+                            sand: '#EBE5DF',
+                            border: 'rgba(26, 26, 26, 0.08)'
+                        }
+                    },
+                    fontFamily: {
+                        serif: ['Playfair Display', 'Noto Serif KR', 'serif'],
+                        sans: ['Plus Jakarta Sans', 'Noto Sans KR', 'sans-serif']
+                    }
+                }
             }
-          </script>
-        </body>
-      </html>
-    `);
-  } catch (err) {
-    console.error('Google OAuth Callback Exception:', err);
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts: Editorial Serif + Sans -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Noto+Serif+KR:wght@400;600;700&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- PDF.js for Canvas Security Rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
+    <!-- PortOne / IAMPORT SDK -->
+    <script src="https://cdn.iamport.kr/v1/iamport.js"></script>
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', 'Noto Sans KR', sans-serif;
+            background-color: #FDFCFB;
+            color: #1A1A1A;
+            overflow-x: hidden;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .font-serif {
+            font-family: 'Playfair Display', 'Noto Serif KR', serif;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(26, 26, 26, 0.08);
+        }
+        .glass-card {
+            background: #FFFFFF;
+            border: 1px solid rgba(26, 26, 26, 0.08);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            border-color: #3A5A40;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px -10px rgba(58, 90, 64, 0.15);
+        }
+        /* Security feature: Hide PDF viewer on print */
+        @media print {
+            .secure-pdf-viewer, #pdf-doc-canvas { display: none !important; }
+            body::before {
+                content: "무단 복제 및 인쇄가 차단되었습니다. (공인중개사법 보호)";
+                display: block; font-size: 24px; text-align: center; margin-top: 20%; color: #A63A2A;
+            }
+        }
+        canvas.pdf-page {
+            border: 1px solid rgba(26, 26, 26, 0.15);
+            margin-bottom: 10px;
+            max-width: 100%;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #F5F2ED; }
+        ::-webkit-scrollbar-thumb { background: #EBE5DF; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3A5A40; }
+    </style>
+</head>
+<body class="antialiased selection:bg-[#3A5A40] selection:text-white" oncontextmenu="return false;">
 
-    const isInvalidClient = err.message && (err.message.includes('invalid_client') || err.message.includes('401'));
-    const isRedirectMismatch = err.message && (err.message.includes('redirect_uri_mismatch') || err.message.includes('redirect_uri'));
-    
-    let errorTitle = 'Google OAuth 로그인 오류';
-    let errorMessage = err.message || '알 수 없는 인증 오류가 발생했습니다.';
-    let solutionGuide = '';
-
-    const currentRedirectUri = getRedirectUri(req);
-    const currentOrigin = currentRedirectUri.replace(/\/api\/auth\/google\/callback$/, '');
-
-    if (isInvalidClient) {
-      errorTitle = 'Google OAuth 보안 인증 실패 (invalid_client)';
-      errorMessage = 'Google OAuth 2.0 인증 서버에서 Client Secret(클라이언트 보안 비밀) 검증을 실패했습니다.';
-      solutionGuide = `
-        <div style="background:#FFF8F6; border:1px solid #FFD0C7; padding:16px; border-radius:6px; margin-top:16px; text-align:left;">
-          <h4 style="color:#D9381E; margin-top:0; margin-bottom:8px; font-size:14px;">🛠️ 원인 및 해결 방법 (Render.com 환경변수 확인)</h4>
-          <ol style="margin:0; padding-left:20px; color:#444; font-size:13px; line-height:1.6;">
-            <li><strong>원인:</strong> Render.com 대시보드의 <code>GOOGLE_CLIENT_SECRET</code> 환경변수 값에 마스킹 문자열(<code>****4uC9</code> 등)이 들어가 있거나, Google Cloud Console의 보안 비밀과 일치하지 않습니다.</li>
-            <li><strong>해결 단계 1:</strong> <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0066CC;">Google Cloud Console API &amp; 서비스 -&gt; 사용자 인증 정보</a>에 접속합니다.</li>
-            <li><strong>해결 단계 2:</strong> 해당 OAuth 2.0 클라이언트 ID의 <strong>'클라이언트 보안 비밀(Client Secret)'</strong> 전체 문자열을 다시 복사합니다.</li>
-            <li><strong>해결 단계 3:</strong> Render.com 대시보드 <strong>Environment</strong> 탭에서 <code>GOOGLE_CLIENT_SECRET</code>에 별표(<code>*</code>) 없이 전체 원본 비밀번호를 수정 후 저장합니다.</li>
-          </ol>
-        </div>
-      `;
-    } else if (isRedirectMismatch) {
-      errorTitle = 'Google OAuth 리디렉션 URI 불일치 (redirect_uri_mismatch)';
-      errorMessage = 'Google Cloud Console에 등록된 승인된 리디렉션 URI와 서버에서 요청한 주소가 일치하지 않습니다.';
-      solutionGuide = `
-        <div style="background:#FFF8F6; border:1px solid #FFD0C7; padding:16px; border-radius:6px; margin-top:16px; text-align:left;">
-          <h4 style="color:#D9381E; margin-top:0; margin-bottom:8px; font-size:14px;">🛠️ 해결 방법 (Google Cloud Console 설정 수정)</h4>
-          <p style="font-size:13px; color:#444; margin-bottom:10px;">아래 주소를 <strong>Google Cloud Console</strong>의 OAuth 2.0 클라이언트 설정에 등록해주세요:</p>
-          <ol style="margin:0; padding-left:20px; color:#444; font-size:13px; line-height:1.7;">
-            <li><a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0066CC; font-weight:bold;">Google Cloud Console API &amp; 서비스 -&gt; 사용자 인증 정보</a> 접속</li>
-            <li>사용 중인 <strong>OAuth 2.0 클라이언트 ID</strong> 클릭</li>
-            <li><strong>'승인된 자바스크립트 원본' (Authorized JavaScript origins)</strong> 항목에 추가:<br/>
-                <code style="background:#EAEAEA; padding:2px 6px; border-radius:4px; font-weight:bold; color:#000;">${currentOrigin}</code>
-            </li>
-            <li><strong>'승인된 리디렉션 URI' (Authorized redirect URIs)</strong> 항목에 추가:<br/>
-                <code style="background:#EAEAEA; padding:2px 6px; border-radius:4px; font-weight:bold; color:#000;">${currentRedirectUri}</code>
-            </li>
-            <li>하단 <strong>[저장]</strong> 클릭 후 1~2분 뒤 다시 로그인 시도</li>
-          </ol>
-        </div>
-      `;
-    }
-
-    res.status(500).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>${errorTitle}</title>
-        </head>
-        <body style="background:#F5F2ED; font-family:sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; margin:0; padding:20px;">
-          <div style="background:white; max-width:560px; width:100%; padding:30px; border-radius:12px; box-shadow:0 4px 16px rgba(0,0,0,0.12); text-align:center;">
-            <div style="font-size:36px; margin-bottom:12px;">⚠️</div>
-            <h3 style="color:#D9381E; margin-top:0; margin-bottom:10px;">${errorTitle}</h3>
-            <p style="color:#555; font-size:14px; background:#F8F9FA; padding:10px; border-radius:6px; font-family:monospace; word-break:break-all;">
-              오류 메시지: ${errorMessage}
-            </p>
-            ${solutionGuide}
-            <div style="margin-top:20px; display:flex; gap:10px; justify-content:center;">
-              <button onclick="window.close()" style="background:#3A5A40; color:white; border:none; padding:10px 20px; border-radius:6px; cursor:pointer; font-weight:bold; font-size:13px;">
-                창 닫기
-              </button>
+    <!-- Top Editorial Header & Mandatory Legal Banner (공인중개사법 제18조의2 실시간 동적 바인딩) -->
+    <header class="sticky top-0 z-50 bg-[#FDFCFB]/90 backdrop-blur-md border-b border-black/5 text-xs">
+        <div class="max-w-7xl mx-auto px-6 py-3 flex flex-col md:flex-row justify-between items-center gap-3">
+            <div>
+                <h1 class="text-[10px] tracking-widest uppercase font-semibold text-black/40 mb-0.5">Premium Land Brokerage Platform</h1>
+                <div class="flex items-baseline gap-4">
+                    <span class="text-xl font-serif italic font-bold text-[#3A5A40] cursor-pointer" onclick="showHomeView()">StarRealtor Land</span>
+                    <span class="text-xs font-medium border-l border-black/20 pl-4 text-black/70" id="header-office-name">상호: 스타공인중개사사무소</span>
+                    <span class="text-xs text-black/50 hidden lg:inline">| 대표유선: <strong class="text-[#3A5A40]" id="header-landline-phone">02-1234-5678</strong></span>
+                </div>
             </div>
-          </div>
-        </body>
-      </html>
-    `);
-  }
-};
-
-app.get('/api/auth/google/callback', handleGoogleCallback);
-app.get('/api/auth/google/callback/', handleGoogleCallback);
-
-// Auth - Google OAuth Login (POST handler for ID Tokens / Fallback)
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const { credential, email: googleEmail, name: googleName } = req.body;
-    let targetEmail = googleEmail;
-    let targetName = googleName || 'Google User';
-
-    // If credential token provided, verify with Google Auth Library
-    if (credential) {
-      try {
-        const ticket = await oauth2Client.verifyIdToken({
-          idToken: credential,
-          audience: process.env.GOOGLE_CLIENT_ID
-        });
-        const payload = ticket.getPayload();
-        targetEmail = payload.email;
-        targetName = payload.name || targetName;
-      } catch (err) {
-        console.warn('Google ID Token verification failed, using client fallback:', err.message);
-      }
-    }
-
-    if (!targetEmail || !targetEmail.includes('@')) {
-      return res.status(400).json({ error: '유효한 Google 이메일 계정 정보가 전달되지 않았습니다.' });
-    }
-
-    const normalizeEmail = targetEmail.trim().toLowerCase();
-
-    // Check if normalizeEmail matches Admin_ID environment variable
-    const envAdminEmail = process.env.Admin_ID || process.env.ADMIN_ID;
-    let role = 'MEMBER';
-
-    if (envAdminEmail && normalizeEmail === envAdminEmail.trim().toLowerCase()) {
-      role = 'ADMIN';
-    }
-
-    let user = null;
-
-    if (usePg) {
-      try {
-        const result = await pool.query('SELECT * FROM TB_USER WHERE LOWER(email) = LOWER($1)', [normalizeEmail]);
-        if (result.rows.length > 0) user = result.rows[0];
-      } catch (e) {
-        console.warn('PostgreSQL DB google login query warning:', e.message);
-      }
-    }
-
-    if (!user) {
-      user = inMemoryDB.users.find(u => u.email.toLowerCase() === normalizeEmail);
-    }
-
-    if (!user) {
-      const userId = `u-g-${Date.now()}`;
-      user = {
-        user_id: userId,
-        email: normalizeEmail,
-        password_hash: '',
-        nickname: targetName,
-        name: targetName,
-        phone_number: '010-0000-0000',
-        role: role,
-        created_at: new Date().toISOString()
-      };
-      inMemoryDB.users.push(user);
-
-      if (usePg) {
-        try {
-          await pool.query(
-            `INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [userId, normalizeEmail, '', targetName, targetName, '010-0000-0000', role]
-          );
-        } catch (e) {
-          console.warn('PostgreSQL DB google user insert warning:', e.message);
-        }
-      }
-    } else {
-      if (role === 'ADMIN' && user.role !== 'ADMIN') {
-        user.role = 'ADMIN';
-        if (usePg) {
-          try {
-            await pool.query('UPDATE TB_USER SET role = $1 WHERE user_id = $2', ['ADMIN', user.user_id]);
-          } catch (e) {
-            console.warn('PostgreSQL DB update admin role warning:', e.message);
-          }
-        }
-      }
-    }
-
-    const token = jwt.sign(
-      { id: user.user_id, email: user.email, role: user.role, nickname: user.nickname },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    return res.json({
-      success: true,
-      token,
-      role: user.role,
-      nickname: user.nickname,
-      email: user.email,
-      user_id: user.user_id
-    });
-  } catch (err) {
-    console.error('Google Auth Exception:', err);
-    return res.status(500).json({ error: 'Google 로그인 처리 중 오류가 발생했습니다: ' + err.message });
-  }
-});
-
-// Auth - Get current user profile
-app.get('/api/auth/me', authenticateToken, (req, res) => {
-  let user = inMemoryDB.users.find(u => u.user_id === req.user.id || u.email.toLowerCase() === (req.user.email || '').toLowerCase());
-  if (!user) {
-    user = {
-      user_id: req.user.id,
-      email: req.user.email,
-      role: req.user.role,
-      nickname: req.user.nickname
-    };
-  }
-  return res.json({
-    user: {
-      user_id: user.user_id,
-      email: user.email,
-      role: user.role,
-      nickname: user.nickname,
-      name: user.name || user.nickname,
-      phone_number: user.phone_number || ''
-    }
-  });
-});
-
-// 3. Land Listings Endpoints
-app.get('/api/listings', (req, res) => {
-  let results = [...inMemoryDB.listings];
-  const { jimok, search, min_price, max_price } = req.query;
-
-  if (jimok && jimok !== '전체') {
-    results = results.filter(l => l.jimok_official === jimok);
-  }
-  if (search) {
-    const q = search.toLowerCase();
-    results = results.filter(l =>
-      l.title.toLowerCase().includes(q) ||
-      l.address.toLowerCase().includes(q) ||
-      l.zoning_district.toLowerCase().includes(q)
-    );
-  }
-  if (min_price) {
-    results = results.filter(l => l.price >= Number(min_price));
-  }
-  if (max_price) {
-    results = results.filter(l => l.price <= Number(max_price));
-  }
-
-  res.json(results);
-});
-
-// 대한민국 3대 공공데이터 OPEN API 연동엔드포인트 (국토교통부 + 토지이음 + 브이월드)
-app.post('/api/public-land-api/lookup', authenticateToken, (req, res) => {
-  const { address } = req.body;
-  if (!address) {
-    return res.status(400).json({ error: '지번 주소를 입력해주세요.' });
-  }
-
-  const cleanAddr = address.trim();
-
-  // 금지구역 검증
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(cleanAddr)) {
-    return res.status(400).json({
-      error: '등록 불가 매물 경고: 국토교통부 토지이용계획 데이터 확인 결과, 해당 지번은 [군사보호구역/농업진흥구역/개발제한구역]으로 규제되어 매물 등록이 불가합니다.'
-    });
-  }
-
-  // PNU 생성 (가상 19자리 필지고유번호 계산)
-  let pnuCode = '4146110200100780001';
-  if (cleanAddr.includes('평창')) pnuCode = '4276033022200450002';
-  else if (cleanAddr.includes('당진')) pnuCode = '4427034021101230005';
-  else if (cleanAddr.includes('포천')) pnuCode = '4165033023103690006';
-
-  // 1. 국토교통부 토지이용계획정보 API 데이터 (용도지역/지구/구역)
-  let zoning = '계획관리지역';
-  if (cleanAddr.includes('평창')) zoning = '보전관리지역';
-  else if (cleanAddr.includes('용인') || cleanAddr.includes('양주')) zoning = '제1종일반주거지역';
-  else if (cleanAddr.includes('공장')) zoning = '계획관리지역(공장유도)';
-
-  const molitData = {
-    api_source: '국토교통부_토지이용계획정보 오픈 API',
-    pnu: pnuCode,
-    zoning_district: zoning,
-    zoning_sub_zone: '경관지구, 가축사육제한구역(일부제한)',
-    use_regulation_summary: '국토의 계획 및 이용에 관한 법률에 따른 용도지역 지정. 건폐율 40% 이하, 용적률 100% 이하 규제 적용.',
-    wms_layer_url: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LP_PA_CBND_BUBBLE,LT_C_UQ111&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=14130000,4510000,14135000,4515000&WIDTH=500&HEIGHT=400&FORMAT=image/png&KEY=MOCK_VWORLD_KEY`,
-    status: 'NORMAL'
-  };
-
-  // 2. 토지이음 (토지이용규제정보서비스 eum.go.kr) API 데이터 (행위제한 & 법령)
-  const landEumData = {
-    api_source: '토지이음_토지이용규제 법령 및 행위제한 API',
-    allowed_buildings: ['단독주택', '제1종 근린생활시설', '제2종 근린생활시설(일부)', '창고시설(허가시)', '농업용 시설'],
-    restricted_buildings: ['위락시설', '위험물 저장 및 처리시설', '고공해 공장'],
-    building_coverage_ratio: zoning.includes('주거') ? '60%' : '40%',
-    floor_area_ratio: zoning.includes('주거') ? '200%' : '100%',
-    local_ordinance_link: 'https://eum.go.kr/web/ar/lu/luLandDet.do',
-    ordinance_notice: '지자체 도시계획 조례에 따라 건축 가능한 구체적 층수 및 용도가 제한될 수 있습니다.'
-  };
-
-  // 3. 브이월드 (V-World) 공간정보 API 데이터 (개별공시지가, 지목, 2D/3D 지도)
-  let officialPrice = 125000;
-  if (cleanAddr.includes('용인') || cleanAddr.includes('양주')) officialPrice = 850000;
-  else if (cleanAddr.includes('평창')) officialPrice = 45000;
-
-  const vworldData = {
-    api_source: 'V-World 브이월드 공간정보 2D/3D 지도 API',
-    pnu: pnuCode,
-    official_land_price_sqm: officialPrice,
-    jimok_official: cleanAddr.includes('산') || cleanAddr.includes('임야') ? '임' : (cleanAddr.includes('양지') || cleanAddr.includes('고암') ? '대' : '전'),
-    land_shape: '부정형 완경사지',
-    road_side_attr: '소로2류(폭 8m~10m) 접함',
-    vworld_tile_map_url: 'https://map.vworld.kr/js/vworldMapInit.js',
-    spatial_coords: { lat: 37.5665, lng: 126.9780 }
-  };
-
-  res.json({
-    success: true,
-    address: cleanAddr,
-    pnu: pnuCode,
-    molit: molitData,
-    land_eum: landEumData,
-    vworld: vworldData
-  });
-});
-
-app.get('/api/listings/:id', (req, res) => {
-  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
-  res.json(listing);
-});
-
-// Member 장바구니에 담긴 토지의 3대 공공 API 토지이용계획 정보 무상 리뷰
-app.get('/api/listings/:id/land-use-review', authenticateToken, (req, res) => {
-  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
-
-  // Member의 경우 장바구니에 담겨있는지 확인
-  const isCarted = inMemoryDB.carts.some(c => c.member_id === req.user.id && c.listing_id === req.params.id);
-  const isStaffOrAdmin = ['STAFF', 'ADMIN', 'OWNER'].includes(req.user.role);
-
-  if (!isCarted && !isStaffOrAdmin) {
-    return res.status(403).json({
-      error: '관심 매물(장바구니)에 담은 토지에 한해 토지이용계획 무료 상세 분석서가 제공됩니다. 먼저 관심 매물에 추가해 주세요.'
-    });
-  }
-
-  // 3대 공공 API 기반 분석 데이터 리턴
-  const address = listing.address;
-  let pnuCode = '4146110200100780001';
-  if (address.includes('평창')) pnuCode = '4276033022200450002';
-  else if (address.includes('당진')) pnuCode = '4427034021101230005';
-
-  let officialPrice = 125000;
-  if (address.includes('용인') || address.includes('양주')) officialPrice = 850000;
-  else if (address.includes('평창')) officialPrice = 45000;
-
-  res.json({
-    success: true,
-    listing_id: listing.listing_id,
-    title: listing.title,
-    address: listing.address,
-    pnu: pnuCode,
-    is_free_cart_review: true,
-    molit: {
-      source: '국토교통부 토지이용계획정보 API',
-      zoning_district: listing.zoning_district,
-      zoning_sub: '자연경관지구, 가축사육제한구역',
-      regulations: '국토의 계획 및 이용에 관한 법률 적용. 군사보호/농업진흥/개발제한구역 해당 없음 (안전 매물 확인완료)',
-      wms_layer_info: 'V-World 연속지적도/토지이용계획도 WMS 바인딩 완료'
-    },
-    land_eum: {
-      source: '토지이음 (eum.go.kr) 행위제한 API',
-      allowed: ['단독주택', '제1종 근린생활시설', '소형 창고', '재배사'],
-      restricted: ['고공해 공장', '위락시설'],
-      coverage: listing.zoning_district.includes('주거') ? '60%' : '40%',
-      far: listing.zoning_district.includes('주거') ? '200%' : '100%'
-    },
-    vworld: {
-      source: 'V-World 공간정보 API',
-      official_price_sqm: officialPrice,
-      estimated_official_total: officialPrice * listing.area_sqm,
-      jimok: listing.jimok_official,
-      shape: '부정형 완경사지',
-      road_access: listing.road_access
-    }
-  });
-});
-
-// Register New Land Listing (Staff or Admin)
-app.post('/api/listings', authenticateToken, (req, res) => {
-  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 또는 관리자만 매물을 등록할 수 있습니다.' });
-  }
-
-  const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url, public_land_data } = req.body;
-
-  // Requirement 4 Validation: Prohibit restricted zones (군사보호지역/농업진흥구역/개발제한구역)
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(zoning_district) || restrictedRegex.test(title) || restrictedRegex.test(address)) {
-    return res.status(400).json({
-      error: '등록 불가 매물: 군사보호지역, 농업진흥구역(절대농지), 개발제한구역(그린벨트)의 토지는 법적으로 수집 및 등록이 전면 금지되어 있습니다.'
-    });
-  }
-
-  const newListing = {
-    listing_id: `lnd-${Date.now()}`,
-    assistant_id: req.user.id,
-    assistant_nickname: req.user.nickname || '담당보조원',
-    title,
-    address,
-    jimok_official: jimok_official || '대',
-    area_sqm: Number(area_sqm) || 100,
-    price: Number(price) || 100000000,
-    zoning_district: zoning_district || '계획관리지역',
-    road_access: road_access || '지적도상 도로 접함',
-    youtube_url: youtube_url || 'https://www.youtube.com/embed/dQw4w9WgXcQ',
-    doc_luris_pdf_url: doc_luris_pdf_url || '/sample-luris.pdf',
-    doc_ledger_pdf_url: doc_ledger_pdf_url || '/sample-ledger.pdf',
-    doc_cadastral_pdf_url: doc_cadastral_pdf_url || '/sample-cadastral.pdf',
-    listing_status: 'ACTIVE',
-    created_at: new Date().toISOString()
-  };
-
-  inMemoryDB.listings.unshift(newListing);
-  res.json({ success: true, listing: newListing });
-});
-
-// Edit Land Listing
-app.put('/api/listings/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '권한이 없습니다.' });
-  }
-
-  const idx = inMemoryDB.listings.findIndex(l => l.listing_id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
-
-  const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url } = req.body;
-
-  // Restricted zone check
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(zoning_district) || restrictedRegex.test(title) || restrictedRegex.test(address)) {
-    return res.status(400).json({
-      error: '등록 불가 매물: 군사보호지역, 농업진흥구역, 개발제한구역 토지는 등록할 수 없습니다.'
-    });
-  }
-
-  inMemoryDB.listings[idx] = {
-    ...inMemoryDB.listings[idx],
-    title,
-    address,
-    jimok_official,
-    area_sqm: Number(area_sqm),
-    price: Number(price),
-    zoning_district,
-    road_access,
-    youtube_url: youtube_url || inMemoryDB.listings[idx].youtube_url
-  };
-
-  res.json({ success: true, listing: inMemoryDB.listings[idx] });
-});
-
-// Delete Land Listing
-app.delete('/api/listings/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN' && req.user.role !== 'OWNER') {
-    return res.status(403).json({ error: '권한이 없습니다.' });
-  }
-  inMemoryDB.listings = inMemoryDB.listings.filter(l => l.listing_id !== req.params.id);
-  res.json({ success: true });
-});
-
-// 4. Shopping Cart Endpoints
-app.get('/api/cart', authenticateToken, (req, res) => {
-  const memberCarts = inMemoryDB.carts.filter(c => c.member_id === req.user.id);
-  const cartListings = memberCarts.map(c => {
-    const listing = inMemoryDB.listings.find(l => l.listing_id === c.listing_id);
-    return { ...c, listing };
-  }).filter(c => c.listing);
-  res.json(cartListings);
-});
-
-app.post('/api/cart', authenticateToken, (req, res) => {
-  const { listing_id } = req.body;
-  if (!listing_id) return res.status(400).json({ error: 'listing_id가 필요합니다.' });
-
-  const exists = inMemoryDB.carts.some(c => c.member_id === req.user.id && c.listing_id === listing_id);
-  if (exists) return res.status(400).json({ error: '이미 관심 매물(쇼핑카드)에 담겨 있습니다.' });
-
-  const cartItem = {
-    cart_id: `c-${Date.now()}`,
-    member_id: req.user.id,
-    listing_id,
-    added_at: new Date().toISOString()
-  };
-  inMemoryDB.carts.push(cartItem);
-  res.json({ success: true, cartItem });
-});
-
-app.delete('/api/cart/:listing_id', authenticateToken, (req, res) => {
-  inMemoryDB.carts = inMemoryDB.carts.filter(c => !(c.member_id === req.user.id && c.listing_id === req.params.listing_id));
-  res.json({ success: true });
-});
-
-// 5. Payment & Google Meet Meetings Endpoints
-app.post('/api/payments/confirm', authenticateToken, (req, res) => {
-  const { listing_id, start_time, imp_uid, merchant_uid, amount } = req.body;
-  if (!listing_id || !start_time) {
-    return res.status(400).json({ error: '매물 ID와 미팅 시간은 필수 항목입니다.' });
-  }
-
-  const listing = inMemoryDB.listings.find(l => l.listing_id === listing_id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
-
-  const staff = inMemoryDB.users.find(u => u.user_id === listing.assistant_id) || {
-    nickname: listing.assistant_nickname,
-    phone_number: '010-3333-4444'
-  };
-
-  const member = inMemoryDB.users.find(u => u.user_id === req.user.id) || {
-    nickname: req.user.nickname,
-    email: req.user.email,
-    phone_number: '010-0000-0000'
-  };
-
-  const meetingId = `m-${Date.now()}`;
-  const meetLink = `https://meet.google.com/lnd-${Math.random().toString(36).substring(2, 8)}`;
-
-  const newMeeting = {
-    meeting_id: meetingId,
-    listing_id,
-    listing_title: listing.title,
-    member_id: req.user.id,
-    member_nickname: member.nickname,
-    member_email: member.email,
-    member_phone: member.phone_number,
-    assistant_id: listing.assistant_id,
-    assistant_nickname: listing.assistant_nickname,
-    assistant_phone: staff.phone_number,
-    meet_link: meetLink,
-    start_time,
-    status: 'CONFIRMED',
-    amount: amount || 50000,
-    imp_uid: imp_uid || `imp_${Date.now()}`,
-    created_at: new Date().toISOString()
-  };
-
-  inMemoryDB.meetings.unshift(newMeeting);
-
-  // Clear from cart if present
-  inMemoryDB.carts = inMemoryDB.carts.filter(c => !(c.member_id === req.user.id && c.listing_id === listing_id));
-
-  res.json({ success: true, meeting: newMeeting });
-});
-
-// Get Member's Meetings (MyPage)
-app.get('/api/meetings/member', authenticateToken, (req, res) => {
-  const userMeetings = inMemoryDB.meetings.filter(m => m.member_id === req.user.id);
-  res.json(userMeetings);
-});
-
-// Cancel & Refund Meeting (Member or Admin)
-app.post('/api/meetings/:id/cancel', authenticateToken, (req, res) => {
-  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
-  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
-
-  if (meeting.member_id !== req.user.id && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '권한이 없습니다.' });
-  }
-
-  meeting.status = 'CANCELLED_REFUNDED';
-  meeting.cancelled_at = new Date().toISOString();
-
-  res.json({ success: true, message: '결제 취소 및 환불 처리가 완료되었습니다.', meeting });
-});
-
-// Delete Meeting
-app.delete('/api/meetings/:id', authenticateToken, (req, res) => {
-  inMemoryDB.meetings = inMemoryDB.meetings.filter(m => m.meeting_id !== req.params.id);
-  res.json({ success: true });
-});
-
-// Get Staff's Assigned Meetings (Staff Dashboard)
-// CRITICAL REQUIREMENT 6: Staff can ONLY see Member ID and Nickname! No email, name, or phone!
-app.get('/api/meetings/staff', authenticateToken, (req, res) => {
-  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
-  }
-
-  const staffMeetings = inMemoryDB.meetings
-    .filter(m => m.assistant_id === req.user.id || req.user.role === 'ADMIN')
-    .map(m => {
-      if (req.user.role === 'STAFF') {
-        // Strict Privacy Masking for Staff
-        return {
-          meeting_id: m.meeting_id,
-          listing_id: m.listing_id,
-          listing_title: m.listing_title,
-          member_id: m.member_id,
-          member_nickname: m.member_nickname,
-          // Masked/Hidden fields:
-          member_email: '***@***.*** (마스킹됨)',
-          member_phone: '010-****-**** (마스킹됨)',
-          meet_link: m.meet_link,
-          start_time: m.start_time,
-          status: m.status,
-          created_at: m.created_at
+
+            <div class="flex items-center gap-4">
+                <!-- User Role / Session Badge -->
+                <div class="flex items-center space-x-2 border-r border-black/10 pr-3">
+                    <span class="text-black/40 text-[11px] uppercase tracking-wider">Status:</span>
+                    <span id="header-user-badge" class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2.5 py-0.5 rounded border border-[#3A5A40]/30 text-[11px]">
+                        비회원 (Guest)
+                    </span>
+                </div>
+
+                <!-- Shopping Cart Trigger Button -->
+                <button onclick="openCartModal()" class="relative bg-[#F5F2ED] hover:bg-[#EBE5DF] text-[#1A1A1A] px-3.5 py-1.5 border border-black/10 text-xs font-bold transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-cart-shopping text-[#3A5A40]"></i>
+                    <span class="text-[11px] uppercase tracking-wider">Cart</span>
+                    <span id="cart-badge-count" class="bg-[#3A5A40] text-white text-[10px] px-1.5 py-0.2 rounded-full font-extrabold">0</span>
+                </button>
+
+                <!-- Auth Buttons - SEPARATE Login and Register buttons (Editorial Style) -->
+                <div id="auth-btn-group" class="flex items-center gap-2">
+                    <button onclick="openModal('login-modal')" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider border border-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white transition-colors">
+                        Login
+                    </button>
+                    <button onclick="openModal('signup-modal')" class="px-4 py-1.5 text-xs font-bold uppercase tracking-wider bg-[#3A5A40] text-white hover:bg-[#2A422F] transition-colors">
+                        Sign Up
+                    </button>
+                </div>
+
+                <!-- Logged In User Menu -->
+                <div id="user-btn-group" class="hidden flex items-center gap-2">
+                    <button onclick="showDashboardView()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-4 py-1.5 text-xs transition uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-chart-line text-[11px]"></i> <span id="dashboard-btn-text">마이페이지</span>
+                    </button>
+                    <button onclick="logout()" class="border border-black/20 hover:bg-[#1A1A1A] hover:text-white text-black/60 px-2.5 py-1.5 text-xs transition">
+                        <i class="fa-solid fa-power-off"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Editorial Sub-Navigation -->
+    <nav class="bg-[#F5F2ED] border-b border-black/5 sticky top-[53px] z-40">
+        <div class="max-w-7xl mx-auto px-6 py-2.5 flex justify-between items-center text-xs">
+            <div class="flex items-center space-x-6">
+                <button onclick="showHomeView()" class="font-bold text-[#1A1A1A] hover:text-[#3A5A40] transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 전국 토지 매물
+                </button>
+                <button onclick="scrollToSection('hero-search')" class="text-black/60 hover:text-[#3A5A40] transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-filter text-black/40"></i> 28개 지목 필터
+                </button>
+                <button onclick="showDashboardView()" class="text-black/60 hover:text-[#3A5A40] transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-video text-black/40"></i> Google Meet 화상 상담
+                </button>
+            </div>
+            <div class="text-[11px] text-black/40 font-serif italic hidden md:block">
+                Curated Land Acquisitions Across South Korea
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="max-w-7xl mx-auto px-6 py-8 space-y-10">
+
+        <!-- VIEW 1: HOME & LISTINGS VIEW -->
+        <div id="view-home" class="space-y-10">
+
+            <!-- Hero Editorial Layout Section -->
+            <section id="hero-search" class="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-[#F5F2ED] border border-black/5 p-8 md:p-12 overflow-hidden">
+                <!-- Left Editorial Intro -->
+                <div class="lg:col-span-5 flex flex-col justify-between space-y-6">
+                    <div>
+                        <span class="text-[10px] uppercase tracking-[0.2em] font-bold text-[#3A5A40]">01 / Marketplace</span>
+                        <h2 class="text-5xl md:text-6xl font-serif italic leading-[0.9] tracking-tight text-[#1A1A1A] my-4">
+                            Legacy<br/>Grounds.
+                        </h2>
+                        <p class="text-xs leading-relaxed text-black/60 uppercase tracking-wide">
+                            대한민국 전 지역 실시간 수집 및 검증된 토지 매물. 3대 고위험 규제 구역(군사보호·농업진흥·그린벨트) 원천 차단으로 안전한 토지 투자를 보장합니다.
+                        </p>
+                    </div>
+
+                    <div class="bg-[#3A5A40] p-5 text-white">
+                        <p class="text-[10px] uppercase tracking-widest mb-1 font-bold">Google Meet Ready</p>
+                        <p class="text-xs leading-relaxed font-serif italic">
+                            매물 상담 및 현장 가이드 결제 완료 시 전담 중개보조원과 Google Meet 화상 상담 일정이 자동 매칭됩니다.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Search & 28 Jimok Filter Control -->
+                <div class="lg:col-span-7 flex flex-col justify-center space-y-6 bg-white p-6 md:p-8 border border-black/5 shadow-sm">
+                    <div class="space-y-2">
+                        <span class="text-[11px] font-bold text-[#3A5A40] uppercase tracking-wider">토지 매물 검색</span>
+                        <h3 class="text-xl font-serif text-[#1A1A1A]">원하는 지역, 지목, 용도지역 탐색</h3>
+                    </div>
+
+                    <!-- Search Bar -->
+                    <div class="flex items-center bg-[#FDFCFB] border border-black/15 p-1.5 focus-within:border-[#3A5A40] transition">
+                        <i class="fa-solid fa-magnifying-glass text-black/40 ml-3 mr-2 text-xs"></i>
+                        <input type="text" id="search-input" onkeyup="filterListings()" placeholder="소재지(예: 평창, 당진, 용인), 지목(전/답/대/임), 용도지역 검색..." class="bg-transparent text-xs text-[#1A1A1A] placeholder-black/40 w-full focus:outline-none py-1.5">
+                        <button onclick="filterListings()" class="bg-[#3A5A40] text-white text-xs px-5 py-2 font-bold hover:bg-[#2A422F] transition uppercase tracking-wider">
+                            검색
+                        </button>
+                    </div>
+
+                    <!-- 28 Jimok Quick Tags Filter -->
+                    <div class="space-y-2 pt-2">
+                        <div class="text-[10px] text-black/50 font-bold uppercase tracking-[0.15em]">공간정보관리법 28개 지목 필터:</div>
+                        <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-3 bg-[#F5F2ED] border border-black/5" id="jimok-tags-container">
+                            <!-- JS populated 28 Jimoks -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Listings Grid Header -->
+            <div class="flex justify-between items-end border-b border-black/10 pb-4">
+                <div>
+                    <span class="text-[10px] uppercase tracking-[0.2em] font-bold text-[#3A5A40]">Curated Listings</span>
+                    <h3 class="text-2xl font-serif italic text-[#1A1A1A] mt-1 flex items-center gap-2">
+                        토지 매물 컬렉션
+                    </h3>
+                    <p class="text-xs text-black/50 mt-1">* 군사보호구역 · 농업진흥구역 · 개발제한구역(그린벨트) 사전 차단 검증 완료</p>
+                </div>
+                <div id="staff-add-listing-container" class="hidden">
+                    <button onclick="openModal('add-listing-modal')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-xs px-4 py-2 transition uppercase tracking-wider flex items-center gap-1.5">
+                        <i class="fa-solid fa-plus text-xs"></i> 매물 수집 등록 (Staff/Admin)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Listings Cards Grid Container -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="listings-grid">
+                <!-- Loaded via JS -->
+            </div>
+        </div>
+
+        <!-- VIEW 2: LISTING DETAIL VIEW -->
+        <div id="view-detail" class="space-y-6 hidden">
+            <button onclick="showHomeView()" class="text-xs text-[#3A5A40] hover:underline font-bold uppercase tracking-wider flex items-center gap-1">
+                <i class="fa-solid fa-arrow-left text-[10px]"></i> Return to Marketplace
+            </button>
+
+            <div class="bg-white border border-black/10 p-6 md:p-8 space-y-8 shadow-sm">
+                <!-- Detail Header -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-black/10 pb-6">
+                    <div>
+                        <div class="flex items-center space-x-3 mb-1">
+                            <span class="text-xs text-[#3A5A40] font-mono font-bold" id="detail-id">LND-2026-0001</span>
+                            <span class="bg-[#3A5A40]/10 text-[#3A5A40] border border-[#3A5A40]/30 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider" id="detail-jimok-badge">지목: 임</span>
+                        </div>
+                        <h2 class="text-3xl font-serif italic text-[#1A1A1A]" id="detail-title">강원도 평창군 대관령면 수하리 임야</h2>
+                        <p class="text-xs text-black/50 mt-1" id="detail-address">강원특별자치도 평창군 대관령면 수하리 산 45-2</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button id="btn-detail-add-cart" onclick="addCurrentToCart()" class="border border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white px-4 py-2 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-cart-plus"></i> 관심매물 담기
+                        </button>
+                        <button onclick="openBookingModalForCurrent()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-5 py-2 text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md">
+                            <i class="fa-solid fa-video"></i> Google Meet 화상 상담 예약
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Media Section (360° VR + YouTube Drone Video) -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Left: Interactive 360° Panorama Viewer Simulation -->
+                    <div class="lg:col-span-7 bg-[#1A1A1A] p-4 text-white space-y-3">
+                        <div class="flex justify-between items-center text-xs border-b border-white/10 pb-2">
+                            <span class="font-bold flex items-center gap-1.5 text-white">
+                                <i class="fa-solid fa-vr-cardboard text-[#3A5A40]"></i> 360° 에퀴렉탱귤러 파노라마 VR 뷰어
+                            </span>
+                            <span class="text-white/40 text-[11px]">마우스 드래그 & 핫스팟 클릭 이동</span>
+                        </div>
+                        <div class="relative h-72 overflow-hidden bg-black/50 group cursor-grab">
+                            <div id="detail-pano-bg" class="absolute inset-0 bg-cover bg-center transition-all duration-700 scale-105" style="background-image: url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80');"></div>
+                            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20 pointer-events-none"></div>
+                            
+                            <!-- Hotspot 1 -->
+                            <button onclick="switchDetailPano('main')" class="absolute top-1/2 left-1/3 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#3A5A40] text-white flex items-center justify-center shadow-lg hover:scale-125 transition">
+                                <i class="fa-solid fa-location-dot text-xs"></i>
+                            </button>
+                            <!-- Hotspot 2 -->
+                            <button onclick="switchDetailPano('road')" class="absolute top-1/3 right-1/4 transform -translate-x-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-[#1A1A1A] text-white border border-white/30 flex items-center justify-center shadow-lg hover:scale-125 transition">
+                                <i class="fa-solid fa-road text-xs"></i>
+                            </button>
+
+                            <div class="absolute bottom-3 left-3 right-3 bg-black/80 backdrop-blur px-3 py-2 text-[11px] flex justify-between items-center border border-white/10">
+                                <span class="text-white/80" id="pano-scene-label">현재 씬: 토지 정중앙 필지</span>
+                                <div class="space-x-1">
+                                    <button onclick="switchDetailPano('main')" class="px-2.5 py-1 bg-[#3A5A40] text-white text-[10px] font-bold uppercase">Scene 1</button>
+                                    <button onclick="switchDetailPano('road')" class="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase">Scene 2</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: YouTube Drone Video Embed -->
+                    <div class="lg:col-span-5 bg-[#1A1A1A] p-4 text-white space-y-3">
+                        <div class="flex justify-between items-center text-xs border-b border-white/10 pb-2">
+                            <span class="font-bold flex items-center gap-1.5 text-white">
+                                <i class="fa-brands fa-youtube text-red-500"></i> 현장 드론 동영상 (비회원 공개)
+                            </span>
+                        </div>
+                        <div class="h-72 overflow-hidden bg-black/50">
+                            <iframe id="detail-youtube-iframe" class="w-full h-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Land Specs Table -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4 bg-[#F5F2ED] p-5 border border-black/5 text-xs">
+                    <div>
+                        <span class="text-black/50 block text-[10px] uppercase tracking-wider font-bold">매매 가액</span>
+                        <strong class="text-[#3A5A40] font-serif italic text-lg font-bold" id="detail-price">3억 5,000 만원</strong>
+                    </div>
+                    <div>
+                        <span class="text-black/50 block text-[10px] uppercase tracking-wider font-bold">토지 면적</span>
+                        <strong class="text-[#1A1A1A] text-sm font-semibold" id="detail-area">3,305 ㎡ (약 1,000평)</strong>
+                    </div>
+                    <div>
+                        <span class="text-black/50 block text-[10px] uppercase tracking-wider font-bold">용도지역</span>
+                        <strong class="text-[#1A1A1A] text-sm font-semibold" id="detail-zoning">보전관리지역</strong>
+                    </div>
+                    <div>
+                        <span class="text-black/50 block text-[10px] uppercase tracking-wider font-bold">도로 접합 여부</span>
+                        <strong class="text-[#3A5A40] text-sm font-semibold" id="detail-road">2차선 포장도로 접함</strong>
+                    </div>
+                </div>
+
+                <!-- Secure PDF Public Documents Section (공적장부 3종) -->
+                <div class="bg-[#F5F2ED] p-6 border border-black/5 space-y-4">
+                    <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                        <div>
+                            <span class="text-[10px] text-[#3A5A40] font-bold uppercase tracking-[0.2em]">Public Records Security Viewer</span>
+                            <h3 class="text-base font-serif italic text-[#1A1A1A] flex items-center gap-2 mt-0.5">
+                                <i class="fa-solid fa-file-pdf text-[#3A5A40]"></i> 토지 공적장부 3종 보안 뷰어 (로그인 전용)
+                            </h3>
+                        </div>
+                        <div class="text-[11px] text-black/50 font-mono">
+                            * Canvas 래스터 라이징 & 동적 워터마킹
+                        </div>
+                    </div>
+
+                    <!-- GUEST LOCK NOTICE -->
+                    <div id="pdf-guest-lock-notice" class="p-8 text-center bg-white border border-black/10 space-y-3">
+                        <i class="fa-solid fa-lock text-3xl text-[#3A5A40]"></i>
+                        <h4 class="text-sm font-bold text-[#1A1A1A]">로그인한 회원만 토지 공적장부(PDF)를 열람할 수 있습니다.</h4>
+                        <p class="text-xs text-black/60 max-w-md mx-auto leading-relaxed">
+                            「공인중개사법」 및 보안 정책에 따라 토지이용계획확인원, 토지대장, 지적도는 로그인 완료된 회원 및 중개보조원에게만 워터마크 보안 뷰어로 노출됩니다.
+                        </p>
+                        <button onclick="openModal('login-modal')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-xs px-5 py-2 uppercase tracking-wider transition">
+                            로그인하고 공적장부 열람하기
+                        </button>
+                    </div>
+
+                    <!-- AUTHORIZED PDF CANVAS VIEWER CONTAINER -->
+                    <div id="pdf-authorized-viewer" class="hidden space-y-4">
+                        <div class="flex space-x-2 text-xs">
+                            <button onclick="loadSecurePDFDoc('LURIS')" id="btn-pdf-luris" class="px-4 py-2 bg-[#3A5A40] text-white font-bold text-xs uppercase tracking-wider transition">
+                                토지이용계획확인원
+                            </button>
+                            <button onclick="loadSecurePDFDoc('LEDGER')" id="btn-pdf-ledger" class="px-4 py-2 bg-white text-[#1A1A1A] border border-black/20 hover:bg-[#1A1A1A] hover:text-white transition">
+                                토지대장
+                            </button>
+                            <button onclick="loadSecurePDFDoc('CADASTRAL')" id="btn-pdf-cadastral" class="px-4 py-2 bg-white text-[#1A1A1A] border border-black/20 hover:bg-[#1A1A1A] hover:text-white transition">
+                                지적도
+                            </button>
+                        </div>
+
+                        <!-- Canvas Output Box -->
+                        <div class="bg-white p-6 border border-black/10 flex flex-col items-center justify-center min-h-[300px] relative select-none shadow-inner">
+                            <div id="pdf-canvas-container" class="w-full flex justify-center">
+                                <!-- Canvas inserted dynamically -->
+                            </div>
+                            <div id="pdf-watermark-notice" class="mt-3 text-[11px] text-[#3A5A40] flex items-center gap-1.5 font-medium">
+                                <i class="fa-solid fa-shield-halved"></i>
+                                <span id="watermark-info-text">보안 워터마크 바인딩 완료 (Member Email & IP)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- VIEW 3: DASHBOARD & MYPAGE (ROLE-BASED) -->
+        <div id="view-dashboard" class="space-y-6 hidden">
+            <div class="border-b border-black/10 pb-4 flex justify-between items-end">
+                <div>
+                    <span class="text-[10px] text-[#3A5A40] font-bold uppercase tracking-[0.2em]" id="dash-role-badge">Role Level</span>
+                    <h2 class="text-3xl font-serif italic text-[#1A1A1A] mt-0.5" id="dash-title">대시보드 / 마이페이지</h2>
+                </div>
+                <div class="text-xs text-black/50" id="dash-user-info">
+                    로그인된 계정 정보
+                </div>
+            </div>
+
+            <!-- Dynamic Content Container -->
+            <div id="dashboard-dynamic-content" class="space-y-6">
+                <!-- JS Populated based on role -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Dynamic Legal Footer (공인중개사법 제18조의2 공시) -->
+    <footer class="bg-[#1A1A1A] text-white/60 py-12 text-xs border-t border-black/10 mt-20">
+        <div class="max-w-7xl mx-auto px-6 space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-white/40">Ownership</p>
+                    <div class="font-serif italic text-white text-base mb-1" id="footer-office-name">스타공인중개사사무소</div>
+                    <div class="text-white/80">대표공인중개사: <span class="text-white" id="footer-owner-name">홍길동</span></div>
+                    <div class="text-white/60 text-[11px] mt-1 leading-relaxed">사업장: <span id="footer-address">서울특별시 서초구 반포대로 100, 4층</span></div>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-white/40">Registration</p>
+                    <div>사업자등록번호: <span class="text-white" id="footer-biz-num">120-12-12345</span></div>
+                    <div>영업허가번호: <span class="text-white" id="footer-license-num">제11650-2026-00001호</span></div>
+                    <div class="mt-1">무선연락처: <span class="text-[#3A5A40] font-bold text-white" id="footer-mobile-phone">010-9876-5432</span></div>
+                </div>
+                <div>
+                    <p class="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-white/40">Contact HQ</p>
+                    <div>유선전화: <span class="text-white" id="footer-landline-phone">02-1234-5678</span></div>
+                    <div>팩스: <span class="text-white" id="footer-fax-num">02-1234-5679</span></div>
+                    <div>이메일: <span class="text-white" id="footer-email">owner@starrealtor-land.co.kr</span></div>
+                </div>
+                <div class="bg-white/5 p-4 border border-white/10 space-y-1">
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                        <i class="fa-solid fa-gavel text-[#3A5A40]"></i> 공인중개사법 제18조의2 고지
+                    </p>
+                    <p class="text-white/50 text-[10px] leading-relaxed">
+                        본 플랫폼의 모든 중개 대상물 표시·광고 명세는 개업공인중개사의 법적 의무 공시 항목을 동적으로 준수합니다.
+                    </p>
+                </div>
+            </div>
+            <div class="border-t border-white/10 pt-6 flex flex-col md:flex-row justify-between items-center text-[10px] text-white/40 gap-2">
+                <div>© 2026 StarRealtor Land Brokerage Platform. All rights reserved.</div>
+                <div class="font-serif italic">StarRealtor Real Estate Group</div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- ==================================================================== -->
+    <!-- MODALS SECTION -->
+    <!-- ==================================================================== -->
+
+    <!-- MODAL 1: LOGIN MODAL (SEPARATE FROM SIGNUP) -->
+    <div id="login-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-md p-6 space-y-5 relative shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-right-to-bracket text-[#3A5A40]"></i> 회원 로그인
+                </h3>
+                <button onclick="closeModal('login-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleLoginSubmit(event)" class="space-y-4 text-xs">
+                <div>
+                    <label class="block text-black/60 mb-1 font-medium">이메일 계정 (ID)</label>
+                    <input type="email" id="login-email" placeholder="example@gmail.com" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+                <div>
+                    <label class="block text-black/60 mb-1 font-medium">비밀번호</label>
+                    <input type="password" id="login-password" placeholder="비밀번호 입력" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition">
+                    로그인 하기
+                </button>
+            </form>
+
+            <div class="relative flex py-1 items-center">
+                <div class="flex-grow border-t border-black/10"></div>
+                <span class="flex-shrink mx-2 text-[10px] text-black/40 uppercase tracking-widest">Google Gmail 연동</span>
+                <div class="flex-grow border-t border-black/10"></div>
+            </div>
+
+            <!-- Google OAuth Button -->
+            <button onclick="triggerGoogleOAuthLogin()" class="w-full bg-white hover:bg-[#F5F2ED] text-[#1A1A1A] border border-black/15 font-bold py-2.5 text-xs transition flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Google 계정으로 로그인 (권장)
+            </button>
+            <p class="text-[10px] text-black/40 text-center">
+                * Render Cloud Admin_ID Gmail과 일치 시 Admin 권한 자동 승인
+            </p>
+        </div>
+    </div>
+
+    <!-- MODAL 2: SIGNUP MODAL (SEPARATE FROM LOGIN) -->
+    <div id="signup-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-lg p-6 space-y-5 relative shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-user-plus text-[#3A5A40]"></i> 신규 회원가입
+                </h3>
+                <button onclick="closeModal('signup-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleSignupSubmit(event)" class="space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-black/60 mb-1">이메일 (Gmail 권장)</label>
+                        <input type="email" id="signup-email" placeholder="user@gmail.com" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                    <div>
+                        <label class="block text-black/60 mb-1">비밀번호</label>
+                        <input type="password" id="signup-password" placeholder="비밀번호" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-black/60 mb-1">별명 (닉네임)</label>
+                        <input type="text" id="signup-nickname" placeholder="토지투자자" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                    <div>
+                        <label class="block text-black/60 mb-1">실명</label>
+                        <input type="text" id="signup-name" placeholder="홍길동" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1">휴대폰 번호</label>
+                    <input type="text" id="signup-phone" placeholder="010-0000-0000" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1">회원 구분 (역할군)</label>
+                    <select id="signup-role" class="w-full bg-white border border-black/15 p-2.5 text-[#3A5A40] font-bold focus:outline-none">
+                        <option value="MEMBER">회원 (Member) - 토지 매물 검색 및 미팅 결제</option>
+                        <option value="STAFF">중개보조원 (Staff) - 토지 매물 수집 등록 및 미팅 주재</option>
+                        <option value="OWNER">개업공인중개사 (Owner) - 사무소 전체 감독 및 종합 관리</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition mt-2">
+                    회원가입 완료하기
+                </button>
+            </form>
+
+            <div class="relative flex py-1 items-center">
+                <div class="flex-grow border-t border-black/10"></div>
+                <span class="flex-shrink mx-2 text-[10px] text-black/40 uppercase tracking-widest">간편 회원가입 / 로그인</span>
+                <div class="flex-grow border-t border-black/10"></div>
+            </div>
+
+            <!-- Google OAuth Button in Signup Modal -->
+            <button onclick="triggerGoogleOAuthLogin()" class="w-full bg-white hover:bg-[#F5F2ED] text-[#1A1A1A] border border-black/15 font-bold py-2.5 text-xs transition flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                Google 계정으로 빠른 회원가입
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL 3: SHOPPING CART MODAL -->
+    <div id="cart-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-xl p-6 space-y-5 relative shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-cart-shopping text-[#3A5A40]"></i> 내 관심 토지 매물 (쇼핑카드)
+                </h3>
+                <button onclick="closeModal('cart-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <div id="cart-items-list" class="space-y-3 max-h-80 overflow-y-auto text-xs">
+                <!-- JS Populated -->
+            </div>
+
+            <div class="pt-3 border-t border-black/10 flex justify-between items-center">
+                <span class="text-xs text-black/60">총 관심 매물 <strong id="cart-total-count" class="text-[#3A5A40]">0</strong>건</span>
+                <button onclick="closeModal('cart-modal')" class="border border-black/20 px-4 py-2 text-xs font-bold uppercase tracking-wider">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 4: GOOGLE MEET BOOKING & PAYMENT MODAL -->
+    <div id="booking-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-lg p-6 space-y-5 relative shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-video text-[#3A5A40]"></i> Google Meet 화상 상담 예약 및 결제
+                </h3>
+                <button onclick="closeModal('booking-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Mandatory Legal Notice Box (공인중개사법 제18조의4 중개보조원 고지 의무) -->
+            <div class="bg-[#F5F2ED] border border-black/10 p-4 space-y-2 text-xs">
+                <div class="font-bold text-[#1A1A1A] flex items-center gap-1.5">
+                    <i class="fa-solid fa-triangle-exclamation text-[#3A5A40]"></i> 법적 필수 고지 사항 (공인중개사법 제18조의4)
+                </div>
+                <p class="text-[11px] text-black/70 leading-relaxed">
+                    본 상담 및 현장 안내를 진행하는 담당 직원은 개업공인중개사가 아닌 <strong>중개사무소 소속 중개보조원(Staff)</strong>입니다.
+                </p>
+                <label class="flex items-center space-x-2 pt-1 cursor-pointer">
+                    <input type="checkbox" id="legal-staff-consent" required class="w-4 h-4 border-black/20 text-[#3A5A40] focus:ring-0">
+                    <span class="text-[11px] text-[#3A5A40] font-bold">위 사실을 인지하고 동의합니다. (필수)</span>
+                </label>
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-black/60 mb-1">상담 희망 일시 선택</label>
+                    <input type="datetime-local" id="booking-datetime" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+                <div class="bg-white p-3.5 border border-black/10 flex justify-between items-center font-bold">
+                    <span class="text-black/60">Google Meet 매칭 결제금액:</span>
+                    <span class="text-[#3A5A40] text-base font-serif italic">50,000 원</span>
+                </div>
+            </div>
+
+            <button onclick="processPaymentAndBookMeeting()" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-3 text-xs uppercase tracking-wider transition shadow-md">
+                신용카드 결제 및 Google Meet 확정하기
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL 5: STAFF / ADMIN NEW LISTING REGISTRATION MODAL -->
+    <div id="add-listing-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-2xl p-6 space-y-5 relative max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-plus-circle text-[#3A5A40]"></i> 신규 토지 매물 수집 등록 (Staff전용)
+                </h3>
+                <button onclick="closeModal('add-listing-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Restricted Zones Notice Banner -->
+            <div class="bg-[#F5F2ED] border border-black/10 p-3.5 text-[11px] text-black/70 flex items-start gap-2">
+                <i class="fa-solid fa-ban text-[#3A5A40] mt-0.5"></i>
+                <div>
+                    <strong>등록 금지 대상 토지 자동 차단:</strong> 군사보호지역, 농업진흥구역(절대농지), 개발제한구역(그린벨트)에 속하는 토지는 매물로 등록할 수 없으며 입력 즉시 검증 거절됩니다.
+                </div>
+            </div>
+
+            <form onsubmit="handleCreateListingSubmit(event)" class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-black/60 mb-1">매물 제목</label>
+                    <input type="text" id="new-title" placeholder="예: 강원도 평창군 대관령면 수하리 임야 매물" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="block text-black/60 font-medium">소재지 주소 및 토지 지번 (대한민국 전지역)</label>
+                        <button type="button" onclick="lookupPublicLandData()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white text-[10px] font-bold px-2.5 py-1 flex items-center gap-1 transition">
+                            <i class="fa-solid fa-database text-yellow-300"></i> 3대 공공 OPEN API 조회 및 자동연동
+                        </button>
+                    </div>
+                    <input type="text" id="new-address" placeholder="예: 강원특별자치도 평창군 대관령면 수하리 45-2" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <!-- Public Open API Result Preview Banner -->
+                <div id="public-api-result-box" class="hidden bg-[#F5F2ED] border border-[#3A5A40]/30 p-3 space-y-2 text-[11px]">
+                    <div class="flex items-center justify-between font-bold text-[#3A5A40]">
+                        <span class="flex items-center gap-1.5"><i class="fa-solid fa-circle-check text-green-600"></i> 3대 대한민국 공공 API 실시간 자동 연동 완료</span>
+                        <span id="pnu-badge" class="bg-white border border-[#3A5A40]/30 text-[#1A1A1A] text-[9px] px-2 py-0.5">PNU: -</span>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2 text-[10px] bg-white p-2 border border-black/10">
+                        <div>
+                            <strong class="text-[#3A5A40] block">1. 국토교통부 API</strong>
+                            <span id="api-molit-zoning" class="text-black/80 font-medium">-</span>
+                        </div>
+                        <div>
+                            <strong class="text-[#3A5A40] block">2. 토지이음 API</strong>
+                            <span id="api-eum-reg" class="text-black/80 font-medium">건폐율 40% / 용적률 100%</span>
+                        </div>
+                        <div>
+                            <strong class="text-[#3A5A40] block">3. 브이월드 API</strong>
+                            <span id="api-vworld-price" class="text-black/80 font-medium">공시지가: -</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-black/60 mb-1">공간정보법 28개 지목 선택</label>
+                        <select id="new-jimok" class="w-full bg-white border border-black/15 p-2.5 text-[#3A5A40] font-bold focus:outline-none">
+                            <option value="임">임 (임야)</option>
+                            <option value="전">전 (밭)</option>
+                            <option value="답">답 (논)</option>
+                            <option value="대">대 (대지)</option>
+                            <option value="과">과 (과수원)</option>
+                            <option value="목">목 (목장용지)</option>
+                            <option value="장">장 (공장용지)</option>
+                            <option value="잡">잡 (잡종지)</option>
+                            <option value="도">도 (도로)</option>
+                            <option value="천">천 (하천)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-black/60 mb-1">용도지역</label>
+                        <input type="text" id="new-zoning" placeholder="예: 보전관리지역, 계획관리지역" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-black/60 mb-1">토지 면적 (㎡)</label>
+                        <input type="number" id="new-area" placeholder="3305" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                    <div>
+                        <label class="block text-black/60 mb-1">매매가 (원)</label>
+                        <input type="number" id="new-price" placeholder="350000000" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1">도로 접합 상태</label>
+                    <input type="text" id="new-road" placeholder="예: 2차선 포장도로 접함" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1">YouTube 영상 Embed URL</label>
+                    <input type="text" id="new-youtube" value="https://www.youtube.com/embed/dQw4w9WgXcQ" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition mt-2">
+                    매물 검증 및 수집 등록
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 6: MEMBER CART LAND USE FREE REVIEW MODAL (3대 공공 API 분석서) -->
+    <div id="land-use-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-2xl p-6 space-y-5 relative max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-file-contract text-[#3A5A40]"></i> 관심 토지이용계획 무상 상세 분석서 (3대 공공 API)
+                </h3>
+                <button onclick="closeModal('land-use-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <!-- Free Member Benefit Badge -->
+            <div class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 p-3 text-xs flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fa-solid fa-gift text-[#3A5A40] text-sm"></i>
+                    <span class="text-[#3A5A40] font-bold">로그인 Member 전용 혜택: 관심 매물(장바구니) 담김 토지이용계획 100% 무상 분석 열람중</span>
+                </div>
+                <span class="text-[10px] bg-[#3A5A40] text-white px-2 py-0.5 rounded font-bold">FREE REVIEW</span>
+            </div>
+
+            <div id="land-use-content" class="space-y-4 text-xs">
+                <!-- JS Populated -->
+            </div>
+
+            <div class="pt-3 border-t border-black/10 flex justify-between items-center">
+                <p class="text-[10px] text-black/50">* 본 정보는 국토교통부, 토지이음, 브이월드 오피셜 API와 실시간 융복합 연동된 정보입니다.</p>
+                <button onclick="closeModal('land-use-modal')" class="bg-[#3A5A40] text-white px-5 py-2 text-xs font-bold uppercase tracking-wider">확인 완료</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 7: ADMIN USER EDIT MODAL -->
+    <div id="edit-user-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-md p-6 space-y-5 relative shadow-2xl">
+            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                    <i class="fa-solid fa-user-pen text-[#3A5A40]"></i> 사용자 계정 및 권한 수정
+                </h3>
+                <button onclick="closeModal('edit-user-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+
+            <form onsubmit="handleSaveEditUser(event)" class="space-y-3 text-xs">
+                <input type="hidden" id="edit-user-id">
+                
+                <div>
+                    <label class="block text-black/60 mb-1 font-medium">사용자 ID</label>
+                    <input type="text" id="edit-user-id-display" disabled class="w-full bg-[#F5F2ED] border border-black/15 p-2 text-black/60 font-mono">
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1 font-medium">이메일 계정</label>
+                    <input type="email" id="edit-user-email" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1 font-medium">별명 (닉네임)</label>
+                    <input type="text" id="edit-user-nickname" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-black/60 mb-1 font-medium">실명</label>
+                        <input type="text" id="edit-user-name" class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                    <div>
+                        <label class="block text-black/60 mb-1 font-medium">연락처</label>
+                        <input type="text" id="edit-user-phone" class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-black/60 mb-1 font-bold text-[#3A5A40]">권한 설정 (Role)</label>
+                    <select id="edit-user-role" class="w-full bg-white border border-black/15 p-2 text-[#3A5A40] font-bold focus:outline-none focus:border-[#3A5A40]">
+                        <option value="MEMBER">MEMBER (일반 회원)</option>
+                        <option value="STAFF">STAFF (중개보조원)</option>
+                        <option value="OWNER">OWNER (개업공인중개사)</option>
+                        <option value="ADMIN">ADMIN (최고 관리자)</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition mt-2">
+                    변경사항 저장하기
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- JAVASCRIPT LOGIC ENGINE -->
+    <!-- ==================================================================== -->
+    <script>
+        // Global App State
+        let currentUser = null; // { token, role, nickname, email, user_id }
+        let currentListings = [];
+        let currentSelectedListing = null;
+        let ownerConfig = {};
+
+        const JIMOK_28_LIST = ["전", "답", "과", "목", "임", "광", "염", "대", "장", "학", "차", "주", "창", "도", "철", "제", "천", "구", "유", "양", "수", "공", "체", "원", "종", "사", "묘", "잡"];
+
+        // -------------------------------------------------------------
+        // INITIALIZATION
+        // -------------------------------------------------------------
+        window.onload = async function() {
+            await fetchOwnerConfig();
+            init28JimokTags();
+            checkStoredAuth();
+            await fetchListings();
         };
-      }
-      return m;
-    });
 
-  res.json(staffMeetings);
-});
+        // Fetch Owner Metadata (Header & Footer Dynamic Binding)
+        async function fetchOwnerConfig() {
+            try {
+                const res = await fetch('/api/config');
+                ownerConfig = await res.json();
+                updateLegalHeaderFooterUI(ownerConfig);
+            } catch (e) {
+                console.error('Failed to load owner config:', e);
+            }
+        }
 
-// Staff/Admin Updates Meeting Status or Schedule
-app.put('/api/meetings/:id/status', authenticateToken, (req, res) => {
-  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '권한이 없습니다.' });
-  }
+        function updateLegalHeaderFooterUI(config) {
+            if (!config || !config.office_name) return;
+            // Header
+            document.getElementById('header-office-name').innerText = `상호: ${config.office_name}`;
+            document.getElementById('header-landline-phone').innerText = config.landline_phone || '02-1234-5678';
+            // Footer
+            document.getElementById('footer-office-name').innerText = config.office_name;
+            document.getElementById('footer-owner-name').innerText = config.owner_name;
+            document.getElementById('footer-address').innerText = config.address;
+            document.getElementById('footer-biz-num').innerText = config.business_reg_num;
+            document.getElementById('footer-license-num').innerText = config.license_num;
+            document.getElementById('footer-mobile-phone').innerText = config.mobile_phone;
+            document.getElementById('footer-landline-phone').innerText = config.landline_phone;
+            document.getElementById('footer-fax-num').innerText = config.fax_num;
+            document.getElementById('footer-email').innerText = config.email;
+        }
 
-  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
-  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+        function init28JimokTags() {
+            const container = document.getElementById('jimok-tags-container');
+            if (!container) return;
+            container.innerHTML = `<button onclick="filterByJimok('전체')" class="px-3 py-1 text-[11px] font-bold uppercase tracking-wider bg-[#3A5A40] text-white border border-[#2A422F]">전체 (28개)</button>`;
 
-  const { status, start_time } = req.body;
-  if (status) meeting.status = status;
-  if (start_time) meeting.start_time = start_time;
+            JIMOK_28_LIST.forEach(j => {
+                container.innerHTML += `
+                    <button onclick="filterByJimok('${j}')" class="px-3 py-1 text-[11px] font-medium bg-[#EBE5DF] hover:bg-[#3A5A40] hover:text-white text-[#1A1A1A] border border-black/5 transition">
+                        ${j}
+                    </button>
+                `;
+            });
+        }
 
-  res.json({ success: true, meeting });
-});
+        async function checkStoredAuth() {
+            const token = localStorage.getItem('proptech_token');
+            if (!token) return;
 
-// 6. Staff Profile Endpoints
-app.get('/api/staff/profile', authenticateToken, (req, res) => {
-  const user = inMemoryDB.users.find(u => u.user_id === req.user.id);
-  res.json({ user });
-});
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.user) {
+                        currentUser = {
+                            token: token,
+                            role: data.user.role,
+                            nickname: data.user.nickname,
+                            email: data.user.email,
+                            user_id: data.user.user_id
+                        };
+                        updateAuthUI();
+                        return;
+                    }
+                }
+            } catch (e) {
+                console.warn('Stored token verification check failed:', e);
+            }
 
-app.put('/api/staff/profile', authenticateToken, (req, res) => {
-  const user = inMemoryDB.users.find(u => u.user_id === req.user.id);
-  if (!user) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+            const role = localStorage.getItem('proptech_role');
+            const nickname = localStorage.getItem('proptech_nickname');
+            const email = localStorage.getItem('proptech_email');
+            const userId = localStorage.getItem('proptech_userid');
 
-  const { nickname, name, phone_number } = req.body;
-  if (nickname) user.nickname = nickname;
-  if (name) user.name = name;
-  if (phone_number) user.phone_number = phone_number;
+            if (token && role) {
+                currentUser = { token, role, nickname, email: email || 'user@domain.com', user_id: userId };
+                updateAuthUI();
+            }
+        }
 
-  res.json({ success: true, user });
-});
+        function updateAuthUI() {
+            const authBtnGroup = document.getElementById('auth-btn-group');
+            const userBtnGroup = document.getElementById('user-btn-group');
+            const userBadge = document.getElementById('header-user-badge');
+            const staffAddBtn = document.getElementById('staff-add-listing-container');
 
-// 7. Owner Portal Endpoint
-// Requirement 7: Owner can see all Members full personal info, all Listings, all Staff info
-app.get('/api/owner/data', authenticateToken, (req, res) => {
-  if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '개업공인중개사(Owner) 또는 관리자 권한이 필요합니다.' });
-  }
+            if (currentUser) {
+                authBtnGroup.classList.add('hidden');
+                userBtnGroup.classList.remove('hidden');
 
-  const members = inMemoryDB.users.filter(u => u.role === 'MEMBER');
-  const staff = inMemoryDB.users.filter(u => u.role === 'STAFF');
-  const listings = inMemoryDB.listings;
-  const meetings = inMemoryDB.meetings;
+                const roleLabels = {
+                    MEMBER: '회원 (Member)',
+                    STAFF: '중개보조원 (Staff)',
+                    OWNER: '개업공인중개사 (Owner)',
+                    ADMIN: '웹서버관리자 (Admin)'
+                };
 
-  res.json({ members, staff, listings, meetings });
-});
+                userBadge.innerText = `${currentUser.nickname} [${roleLabels[currentUser.role] || currentUser.role}]`;
+                userBadge.className = 'bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2.5 py-0.5 border border-[#3A5A40]/30 text-[11px]';
 
-// 8. Admin User Management Endpoints
-app.get('/api/admin/users', authenticateToken, (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
-  }
-  res.json(inMemoryDB.users);
-});
+                if (currentUser.role === 'STAFF' || currentUser.role === 'ADMIN') {
+                    if (staffAddBtn) staffAddBtn.classList.remove('hidden');
+                } else {
+                    if (staffAddBtn) staffAddBtn.classList.add('hidden');
+                }
+                updateCartBadge();
+            } else {
+                authBtnGroup.classList.remove('hidden');
+                userBtnGroup.classList.add('hidden');
+                userBadge.innerText = '비회원 (Guest)';
+                userBadge.className = 'bg-[#F5F2ED] text-black/50 font-medium px-2.5 py-0.5 border border-black/10 text-[11px]';
+                if (staffAddBtn) staffAddBtn.classList.add('hidden');
+            }
+        }
 
-app.post('/api/admin/users', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
-  }
-  const { email, password, nickname, name, phone_number, role } = req.body;
+        // -------------------------------------------------------------
+        // AUTH ACTIONS (LOGIN & SIGNUP - SEPARATED)
+        // -------------------------------------------------------------
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            const emailInput = document.getElementById('login-email');
+            const passwordInput = document.getElementById('login-password');
+            const email = emailInput ? emailInput.value.trim() : '';
+            const password = passwordInput ? passwordInput.value : '';
 
-  const hashedPassword = await bcrypt.hash(password || '123456', 10);
-  const newUser = {
-    user_id: `u-${Date.now()}`,
-    email,
-    password_hash: hashedPassword,
-    nickname,
-    name: name || nickname,
-    phone_number: phone_number || '',
-    role: role || 'MEMBER',
-    created_at: new Date().toISOString()
-  };
+            if (!email || !password) {
+                alert('이메일과 비밀번호를 모두 입력해주세요.');
+                return;
+            }
 
-  inMemoryDB.users.push(newUser);
-  res.json({ success: true, user: newUser });
-});
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '로그인에 실패하였습니다.');
 
-app.put('/api/admin/users/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
-  }
-  const user = inMemoryDB.users.find(u => u.user_id === req.params.id);
-  if (!user) return res.status(404).json({ error: '사용자를 찾을 수 없습니다.' });
+                saveUserSession(data);
+                closeModal('login-modal');
+                if (emailInput) emailInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+                alert(`환영합니다, ${data.nickname}님! (${data.role} 권한으로 로그인되었습니다.)`);
+            } catch (err) {
+                alert(`[로그인 오류] ${err.message}`);
+            }
+        }
 
-  const { nickname, name, phone_number, role } = req.body;
-  if (nickname) user.nickname = nickname;
-  if (name) user.name = name;
-  if (phone_number) user.phone_number = phone_number;
-  if (role) user.role = role;
+        async function handleSignupSubmit(e) {
+            e.preventDefault();
+            const email = document.getElementById('signup-email').value.trim();
+            const password = document.getElementById('signup-password').value;
+            const nickname = document.getElementById('signup-nickname').value.trim();
+            const name = document.getElementById('signup-name').value.trim();
+            const phone_number = document.getElementById('signup-phone').value.trim();
+            const role = document.getElementById('signup-role').value;
 
-  res.json({ success: true, user });
-});
+            if (!email || !password || !nickname) {
+                alert('이메일, 비밀번호, 별명은 필수 입력 사항입니다.');
+                return;
+            }
 
-app.delete('/api/admin/users/:id', authenticateToken, (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
-  }
-  inMemoryDB.users = inMemoryDB.users.filter(u => u.user_id !== req.params.id);
-  res.json({ success: true });
-});
+            try {
+                const res = await fetch('/api/auth/signup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, nickname, name, phone_number, role })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '회원가입에 실패하였습니다.');
 
-// 9. PDF Secure Watermarked Viewer Endpoint
-// Rule: Staff-registered PDF documents require MEMBER to have a COMPLETED Google Meet consultation (payment + meeting done)
-app.get('/api/pdf/secure-viewer', authenticateToken, async (req, res) => {
-  try {
-    const docType = req.query.doc_type || 'LURIS';
-    const listingId = req.query.listing_id;
+                saveUserSession(data);
+                closeModal('signup-modal');
+                alert(`회원가입이 완료되었습니다! ${data.nickname}님 환영합니다.`);
+            } catch (err) {
+                alert(`[회원가입 오류] ${err.message}`);
+            }
+        }
 
-    if (req.user.role === 'MEMBER') {
-      // Check if Member has completed meeting for this listing
-      const completedMeeting = inMemoryDB.meetings.find(m =>
-        m.member_id === req.user.id &&
-        m.listing_id === listingId &&
-        m.status === 'COMPLETED'
-      );
+        async function triggerGoogleOAuthLogin() {
+            try {
+                // 1. Try real Google OAuth2.0 Popup Authorization Flow first
+                const origin = window.location.origin;
+                const res = await fetch(`/api/auth/google/url?origin=${encodeURIComponent(origin)}`);
 
-      if (!completedMeeting) {
-        return res.status(403).json({
-          error: '🔒 [보안 문서 열람 제한] Staff가 등록한 공식 토지 분석 PDF 문서는 상담료 결제 완료 및 Google Meet 화상 미팅 종료(COMPLETED) 후에만 리뷰 및 다운로드가 가능합니다.'
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.url) {
+                        const width = 520;
+                        const height = 650;
+                        const left = (window.screen.width / 2) - (width / 2);
+                        const top = (window.screen.height / 2) - (height / 2);
+
+                        const popup = window.open(
+                            data.url,
+                            'google_oauth_popup',
+                            `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+                        );
+
+                        if (!popup) {
+                            alert('팝업 차단이 활성화되어 있습니다. 브라우저 주소창 우측에서 팝업 허용 후 다시 시도해주세요.');
+                        }
+                        return;
+                    }
+                } else {
+                    const errData = await res.json();
+                    if (errData && errData.error) {
+                        alert(`[Google OAuth 설정 필요]\n${errData.error}`);
+                    }
+                }
+            } catch (err) {
+                console.warn('Google OAuth authorization URL fetch exception:', err);
+            }
+
+            // Fallback for environment prior to setting valid GOOGLE_CLIENT_ID
+            const sampleGmail = prompt(
+                "[Google OAuth 2.0 빠른 테스트]\nGoogle Cloud Console에서 Client ID 발급 전 또는 재발급 등록 중 빠른 회원가입/로그인 테스트 모드입니다.\n로그인 및 회원가입에 사용할 Gmail 계정을 입력하세요:",
+                "ohseyokr@gmail.com"
+            );
+            if (!sampleGmail || !sampleGmail.trim()) return;
+
+            const trimmedEmail = sampleGmail.trim();
+            if (!trimmedEmail.includes('@')) {
+                alert('유효한 이메일 주소 형식이 아닙니다.');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/auth/google', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: trimmedEmail,
+                        name: trimmedEmail.split('@')[0]
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Google 로그인에 실패하였습니다.');
+
+                saveUserSession(data);
+                closeModal('login-modal');
+                closeModal('signup-modal');
+                alert(`Google 계정(${data.email})으로 성공적으로 로그인되었습니다! [권한: ${data.role}]`);
+            } catch (err) {
+                alert(`[Google 로그인 오류] ${err.message}`);
+            }
+        }
+
+        // Global PostMessage Listener for Popup OAuth Completion
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+                const data = event.data;
+                saveUserSession(data);
+                closeModal('login-modal');
+                closeModal('signup-modal');
+                alert(`Google 계정(${data.email})으로 성공적으로 로그인/회원가입되었습니다! [권한: ${data.role}]`);
+            }
         });
-      }
-    }
 
-    // Generate dynamic PDF with pdf-lib
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
-    const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+        function saveUserSession(data) {
+            currentUser = {
+                token: data.token,
+                role: data.role,
+                nickname: data.nickname,
+                email: data.email || 'user@domain.com',
+                user_id: data.user_id
+            };
+            localStorage.setItem('proptech_token', data.token);
+            localStorage.setItem('proptech_role', data.role);
+            localStorage.setItem('proptech_nickname', data.nickname);
+            localStorage.setItem('proptech_email', currentUser.email);
+            localStorage.setItem('proptech_userid', data.user_id);
+            updateAuthUI();
+        }
 
-    page.drawText(`OFFICIAL LAND DOCUMENT [${docType}]`, { x: 50, y: 740, size: 20 });
-    page.drawText(`Listing Reference ID: ${listingId || 'LND-2026-REF'}`, { x: 50, y: 710, size: 12 });
-    page.drawText(`Status: Verified Public Record (Post-Consultation Release)`, { x: 50, y: 690, size: 12 });
+        function logout() {
+            currentUser = null;
+            localStorage.removeItem('proptech_token');
+            localStorage.removeItem('proptech_role');
+            localStorage.removeItem('proptech_nickname');
+            localStorage.removeItem('proptech_email');
+            localStorage.removeItem('proptech_userid');
+            updateAuthUI();
+            showHomeView();
+            alert('로그아웃 되었습니다.');
+        }
 
-    page.drawRectangle({
-      x: 45,
-      y: 100,
-      width: 510,
-      height: 560,
-      borderColor: rgb(0.2, 0.4, 0.8),
-      borderWidth: 1
-    });
+        // -------------------------------------------------------------
+        // LISTINGS DATA FETCHING & RENDERING
+        // -------------------------------------------------------------
+        async function fetchListings() {
+            try {
+                const res = await fetch('/api/listings');
+                currentListings = await res.json();
+                renderListingsGrid(currentListings);
+            } catch (err) {
+                console.error('Failed to fetch listings:', err);
+            }
+        }
 
-    page.drawText('Document Details & Land Cadastral Map Data', { x: 60, y: 630, size: 14 });
-    page.drawText('Area: Verified Sqm / Zoning: Confirmed Control Zone', { x: 60, y: 600, size: 10 });
-    page.drawText('Consultation & Payment Completed - Released to Member', { x: 60, y: 570, size: 10 });
+        function renderListingsGrid(listings) {
+            const grid = document.getElementById('listings-grid');
+            grid.innerHTML = '';
 
-    // Dynamic Watermark: User Email, IP, Access Timestamp
-    const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
-    const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
-    const watermarkText = `MEMBER: ${req.user.email} | IP: ${ip} | ACCESSED: ${timestamp}`;
+            if (listings.length === 0) {
+                grid.innerHTML = `<div class="col-span-3 text-center py-12 text-black/40">조건에 일치하는 토지 매물이 없습니다.</div>`;
+                return;
+            }
 
-    page.drawText(watermarkText, {
-      x: 70,
-      y: 400,
-      size: 11,
-      font,
-      color: rgb(0.8, 0.2, 0.2),
-      opacity: 0.35,
-      rotate: degrees(45)
-    });
+            listings.forEach(item => {
+                grid.innerHTML += `
+                    <div class="glass-card overflow-hidden border border-black/10 relative group cursor-pointer bg-white" onclick="openListingDetail('${item.listing_id}')">
+                        <div class="relative h-48 bg-stone-200 overflow-hidden">
+                            <img src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=600&q=80" alt="토지 대표" class="w-full h-full object-cover group-hover:scale-105 transition duration-500">
+                            <div class="absolute top-3 left-3 flex flex-wrap gap-1">
+                                <span class="bg-[#3A5A40] text-white font-bold text-[9px] px-2 py-0.5 uppercase tracking-wider">
+                                    360° VR
+                                </span>
+                                <span class="bg-[#1A1A1A] text-white font-bold text-[9px] px-2 py-0.5 uppercase tracking-wider">
+                                    드론 영상
+                                </span>
+                            </div>
+                            <div class="absolute bottom-3 right-3 bg-white/95 text-[#3A5A40] font-bold text-[10px] px-2.5 py-0.5 border border-black/10 uppercase tracking-wide">
+                                지목: ${item.jimok_official}
+                            </div>
+                        </div>
+                        <div class="p-5 space-y-3">
+                            <div class="flex justify-between items-start gap-2">
+                                <div>
+                                    <span class="text-[10px] text-[#3A5A40] font-mono font-bold tracking-wider uppercase">${item.listing_id}</span>
+                                    <h3 class="font-serif italic text-lg text-[#1A1A1A] group-hover:text-[#3A5A40] transition line-clamp-1">${item.title}</h3>
+                                </div>
+                                <button onclick="event.stopPropagation(); addToCartDirect('${item.listing_id}')" class="text-black/30 hover:text-[#3A5A40] text-base p-1" title="관심매물 담기">
+                                    <i class="fa-solid fa-cart-plus"></i>
+                                </button>
+                            </div>
+                            <div class="text-xs text-[#1A1A1A] space-y-1.5 bg-[#F5F2ED] p-3 border border-black/5">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-black/50 text-[10px] uppercase tracking-wider font-bold">매매 가액</span>
+                                    <span class="font-serif italic font-bold text-[#3A5A40] text-base">${(item.price / 100000000).toFixed(1)} 억원</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-black/50 text-[10px] uppercase tracking-wider font-bold">토지 면적</span>
+                                    <span class="font-medium">${item.area_sqm} ㎡ (약 ${(item.area_sqm / 3.3058).toFixed(0)}평)</span>
+                                </div>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-black/50 text-[10px] uppercase tracking-wider font-bold">용도지역</span>
+                                    <span class="font-medium text-[#1A1A1A]">${item.zoning_district}</span>
+                                </div>
+                            </div>
+                            <div class="pt-1 flex items-center justify-between text-[10px]">
+                                <span class="text-black/50">담당: ${item.assistant_nickname}</span>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="event.stopPropagation(); openLandUseReviewModal('${item.listing_id}')" class="bg-[#3A5A40]/10 text-[#3A5A40] hover:bg-[#3A5A40] hover:text-white font-bold px-2 py-0.5 border border-[#3A5A40]/30 transition" title="관심매물 3대 공공 API 무상 분석">
+                                        무상 분석
+                                    </button>
+                                    <button onclick="event.stopPropagation(); openSecurePdfViewer('${item.listing_id}', 'LURIS')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-2 py-0.5 border border-stone-300 transition flex items-center gap-1" title="결제 및 미팅 완료 회원 전용 PDF">
+                                        <i class="fa-solid fa-file-pdf text-red-600"></i> PDF
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
 
-    const pdfBytes = await pdfDoc.save();
+        function filterListings() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            const filtered = currentListings.filter(l =>
+                l.title.toLowerCase().includes(query) ||
+                l.address.toLowerCase().includes(query) ||
+                l.jimok_official.includes(query) ||
+                l.zoning_district.toLowerCase().includes(query)
+            );
+            renderListingsGrid(filtered);
+        }
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${docType}.pdf"`);
-    res.send(Buffer.from(pdfBytes));
-  } catch (err) {
-    console.error('PDF Generation Error:', err);
-    res.status(500).json({ error: 'PDF 생성 오류가 발생했습니다.' });
-  }
-});
+        function filterByJimok(j) {
+            if (j === '전체') {
+                renderListingsGrid(currentListings);
+            } else {
+                const filtered = currentListings.filter(l => l.jimok_official === j);
+                renderListingsGrid(filtered);
+            }
+        }
 
-// -------------------------------------------------------------
-// VITE DEV MIDDLEWARE & STATIC FALLBACK
-// -------------------------------------------------------------
+        // -------------------------------------------------------------
+        // LISTING DETAIL VIEW & PDF CANVAS SECURITY VIEWER
+        // -------------------------------------------------------------
+        function openListingDetail(id) {
+            const listing = currentListings.find(l => l.listing_id === id);
+            if (!listing) return;
 
-async function startServer() {
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa'
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
-  }
+            currentSelectedListing = listing;
+            document.getElementById('detail-id').innerText = listing.listing_id;
+            document.getElementById('detail-title').innerText = listing.title;
+            document.getElementById('detail-address').innerText = listing.address;
+            document.getElementById('detail-jimok-badge').innerText = `지목: ${listing.jimok_official}`;
+            document.getElementById('detail-price').innerText = `${(listing.price / 100000000).toFixed(1)} 억원 (${listing.price.toLocaleString()} 원)`;
+            document.getElementById('detail-area').innerText = `${listing.area_sqm} ㎡ (약 ${(listing.area_sqm / 3.3058).toFixed(0)}평)`;
+            document.getElementById('detail-zoning').innerText = listing.zoning_district;
+            document.getElementById('detail-road').innerText = listing.road_access;
+            document.getElementById('detail-youtube-iframe').src = listing.youtube_url || "https://www.youtube.com/embed/dQw4w9WgXcQ";
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 PropTech Land Server running on http://0.0.0.0:${PORT}`);
-  });
-}
+            // Security Check for Public Records PDF Viewer
+            const guestNotice = document.getElementById('pdf-guest-lock-notice');
+            const authViewer = document.getElementById('pdf-authorized-viewer');
 
-startServer();
+            if (currentUser) {
+                guestNotice.classList.add('hidden');
+                authViewer.classList.remove('hidden');
+                loadSecurePDFDoc('LURIS');
+            } else {
+                guestNotice.classList.remove('hidden');
+                authViewer.classList.add('hidden');
+            }
+
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-detail').classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function switchDetailPano(scene) {
+            const bg = document.getElementById('detail-pano-bg');
+            const label = document.getElementById('pano-scene-label');
+            if (scene === 'main') {
+                bg.style.backgroundImage = `url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80')`;
+                label.innerText = "현재 씬: 토지 정중앙 필지";
+            } else {
+                bg.style.backgroundImage = `url('https://images.unsplash.com/photo-1592595896551-12b371d546d5?auto=format&fit=crop&w=1200&q=80')`;
+                label.innerText = "현재 씬: 진입로 도로경계 지점";
+            }
+        }
+
+        async function loadSecurePDFDoc(docType) {
+            if (!currentUser || !currentSelectedListing) return;
+
+            const container = document.getElementById('pdf-canvas-container');
+            container.innerHTML = `<p class="text-xs text-[#3A5A40] animate-pulse py-8 font-serif italic">보안 워터마크 PDF를 래스터 라이징하는 중...</p>`;
+
+            try {
+                // Fetch Watermarked PDF from backend with token
+                const res = await fetch(`/api/pdf/secure-viewer?doc_type=${docType}&listing_id=${currentSelectedListing.listing_id}`, {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+
+                if (!res.ok) throw new Error('PDF 로드 권한 오류');
+
+                const blob = await res.blob();
+                const arrayBuffer = await blob.arrayBuffer();
+
+                const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                const page = await pdf.getPage(1);
+
+                const scale = 1.2;
+                const viewport = page.getViewport({ scale });
+
+                const canvas = document.createElement('canvas');
+                canvas.className = 'pdf-page shadow-md';
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+
+                await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                container.innerHTML = '';
+                container.appendChild(canvas);
+
+                document.getElementById('watermark-info-text').innerText = `보안 워터마크 적용 완료: MEMBER [${currentUser.email}] | 시각: ${new Date().toLocaleTimeString()}`;
+            } catch (err) {
+                container.innerHTML = `<p class="text-xs text-rose-600 py-8">PDF 보안 뷰어를 불러오는 도중 오류가 발생했습니다.</p>`;
+            }
+        }
+
+        // -------------------------------------------------------------
+        // PUBLIC LAND OPEN API & LAND USE REVIEW & SECURE PDF FUNCTIONS
+        // -------------------------------------------------------------
+        async function lookupPublicLandData() {
+            if (!currentUser) {
+                alert('공공 API 자동 조회를 실행하려면 먼저 로그인(Staff 또는 회원 계정)이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            const addrInput = document.getElementById('new-address');
+            const address = addrInput ? addrInput.value.trim() : '';
+
+            if (!address) {
+                alert('소재지 주소 또는 토지 지번을 입력한 후 3대 공공 OPEN API 조회를 실행해주세요.');
+                if (addrInput) addrInput.focus();
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/public-land-api/lookup', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ address })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '공공 API 연동 실패');
+
+                // Fill UI
+                document.getElementById('pnu-badge').innerText = `PNU: ${data.pnu}`;
+                document.getElementById('api-molit-zoning').innerText = `${data.molit.zoning_district}`;
+                document.getElementById('api-eum-reg').innerText = `건폐율 ${data.land_eum.building_coverage_ratio} / 용적률 ${data.land_eum.floor_area_ratio}`;
+                document.getElementById('api-vworld-price').innerText = `공시지가: ${data.vworld.official_land_price_sqm.toLocaleString()}원/㎡`;
+
+                document.getElementById('new-zoning').value = data.molit.zoning_district;
+                const jimokSelect = document.getElementById('new-jimok');
+                if (jimokSelect && data.vworld.jimok_official) {
+                    jimokSelect.value = data.vworld.jimok_official;
+                }
+
+                document.getElementById('public-api-result-box').classList.remove('hidden');
+                alert(`✅ [국토교통부 + 토지이음 + 브이월드] 3대 대한민국 공공 API 정보 수신 완료!\n- PNU: ${data.pnu}\n- 용도지역: ${data.molit.zoning_district}\n- 개별공시지가: ${data.vworld.official_land_price_sqm.toLocaleString()} 원/㎡`);
+            } catch (err) {
+                alert(`[공공 API 조회 오류] ${err.message}`);
+            }
+        }
+
+        async function openLandUseReviewModal(listingId) {
+            if (!currentUser) {
+                alert('로그인한 회원에 한해 관심 매물의 토지이용계획 정보를 무상으로 리뷰할 수 있습니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/listings/${listingId}/land-use-review`, {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '토지이용계획 정보를 불러올 수 없습니다.');
+
+                const container = document.getElementById('land-use-content');
+                container.innerHTML = `
+                    <div class="bg-white p-4 border border-black/10 space-y-2">
+                        <div class="flex justify-between items-center text-[#3A5A40] font-bold text-sm">
+                            <span>${data.title}</span>
+                            <span class="bg-[#F5F2ED] text-black/70 text-[10px] px-2 py-0.5 border border-black/10">PNU: ${data.pnu}</span>
+                        </div>
+                        <p class="text-black/60 text-[11px]">${data.address}</p>
+                    </div>
+
+                    <!-- 3 PUBLIC APIS CARDS GRID -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <!-- 1. MOLIT API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-landmark"></i> 1. 국토교통부 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>용도지역:</strong> ${data.molit.zoning_district}</div>
+                                <div><strong>용도지구:</strong> ${data.molit.zoning_sub}</div>
+                                <p class="text-[10px] text-black/60 leading-tight pt-1">${data.molit.regulations}</p>
+                            </div>
+                        </div>
+
+                        <!-- 2. LAND-EUM API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-gavel"></i> 2. 토지이음 규제 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>건폐율:</strong> ${data.land_eum.coverage} | <strong>용적률:</strong> ${data.land_eum.far}</div>
+                                <div><strong>허용 건축:</strong> ${data.land_eum.allowed.join(', ')}</div>
+                                <div><strong>제한 대상:</strong> ${data.land_eum.restricted.join(', ')}</div>
+                            </div>
+                        </div>
+
+                        <!-- 3. V-WORLD API -->
+                        <div class="bg-[#F5F2ED] p-3 border border border-[#3A5A40]/30 space-y-2">
+                            <div class="font-bold text-[#3A5A40] flex items-center gap-1">
+                                <i class="fa-solid fa-map"></i> 3. 브이월드 지도 API
+                            </div>
+                            <div class="text-[11px] space-y-1">
+                                <div><strong>공시지가:</strong> ${data.vworld.official_price_sqm.toLocaleString()} 원/㎡</div>
+                                <div><strong>공시지가 총액:</strong> 약 ${(data.vworld.estimated_official_total / 10000).toLocaleString()} 만원</div>
+                                <div><strong>지형 형상:</strong> ${data.vworld.shape}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- V-World Overlay Visual Map -->
+                    <div class="bg-[#1A1A1A] p-4 text-white text-center space-y-2 rounded border border-black/20">
+                        <div class="text-xs font-serif italic text-amber-300 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-[#3A5A40]"></i> V-World 연속지적도 & 토지이용계획도 WMS 레이어 융복합 오버레이
+                        </div>
+                        <div class="h-32 bg-emerald-900/30 border border-emerald-500/30 flex items-center justify-center text-[11px] text-emerald-200">
+                            [브이월드 2D/3D 지도 오버레이 레이어 가상 모듈 - 필지 경계선 및 규제선 바인딩 완료]
+                        </div>
+                    </div>
+                `;
+
+                openModal('land-use-modal');
+            } catch (err) {
+                alert(`[무상 리뷰 오류] ${err.message}`);
+            }
+        }
+
+        async function openSecurePdfViewer(listingId, docType = 'LURIS') {
+            if (!currentUser) {
+                alert('PDF 문서를 열람하려면 로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/pdf/secure-viewer?doc_type=${docType}&listing_id=${listingId}`, {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+
+                if (res.status === 403) {
+                    const data = await res.json();
+                    alert(data.error || '🔒 [보안 문서 열람 제한] Staff가 등록한 공식 토지 분석 PDF 문서는 상담료 결제 완료 및 Google Meet 화상 미팅 종료(COMPLETED) 후에만 리뷰 및 다운로드가 가능합니다.');
+                    return;
+                }
+
+                if (!res.ok) {
+                    alert('PDF 문서 요청 처리 중 오류가 발생했습니다.');
+                    return;
+                }
+
+                const blob = await res.blob();
+                const pdfUrl = URL.createObjectURL(blob);
+                window.open(pdfUrl, '_blank');
+            } catch (err) {
+                alert(`[PDF 보안 열람 오류] ${err.message}`);
+            }
+        }
+        async function addToCartDirect(listingId) {
+            if (!currentUser) {
+                alert('관심 매물을 담으려면 로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/cart', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ listing_id: listingId })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '담기 실패');
+
+                alert('관심 매물(쇼핑카드)에 추가되었습니다.');
+                updateCartBadge();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        function addCurrentToCart() {
+            if (currentSelectedListing) {
+                addToCartDirect(currentSelectedListing.listing_id);
+            }
+        }
+
+        async function updateCartBadge() {
+            if (!currentUser) return;
+            try {
+                const res = await fetch('/api/cart', {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const items = await res.json();
+                document.getElementById('cart-badge-count').innerText = items.length;
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function openCartModal() {
+            if (!currentUser) {
+                alert('로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/cart', {
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const items = await res.json();
+
+                const list = document.getElementById('cart-items-list');
+                list.innerHTML = '';
+                document.getElementById('cart-total-count').innerText = items.length;
+
+                if (items.length === 0) {
+                    list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 매물이 없습니다.</p>`;
+                } else {
+                    items.forEach(c => {
+                        list.innerHTML += `
+                            <div class="p-3 bg-[#F5F2ED] border border-black/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                <div class="space-y-1">
+                                    <div class="font-serif italic text-sm text-[#1A1A1A]">${c.listing.title}</div>
+                                    <div class="text-[11px] text-black/50">${c.listing.address} (지목: ${c.listing.jimok_official})</div>
+                                    <div class="text-xs text-[#3A5A40] font-serif font-bold">${(c.listing.price / 100000000).toFixed(1)} 억원</div>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <button onclick="openLandUseReviewModal('${c.listing.listing_id}')" class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 hover:bg-[#3A5A40] hover:text-white text-[#3A5A40] font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-gift"></i> 무상 토지이용계획 분석
+                                    </button>
+                                    <button onclick="openSecurePdfViewer('${c.listing.listing_id}', 'LURIS')" class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                        <i class="fa-solid fa-file-pdf text-red-600"></i> 보안 PDF 리뷰
+                                    </button>
+                                    <button onclick="openBookingModalForListing('${c.listing.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[10px] px-2.5 py-1 uppercase transition">
+                                        미팅 예약
+                                    </button>
+                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심매물 삭제">
+                                        <i class="fa-solid fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+
+                openModal('cart-modal');
+            } catch (err) {
+                alert('카트 정보를 불러올 수 없습니다.');
+            }
+        }
+
+        async function removeCartItem(listingId) {
+            try {
+                await fetch(`/api/cart/${listingId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                openCartModal();
+                updateCartBadge();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function openBookingModalForCurrent() {
+            if (!currentSelectedListing) return;
+            openBookingModalForListing(currentSelectedListing.listing_id);
+        }
+
+        function openBookingModalForListing(listingId) {
+            if (!currentUser) {
+                alert('로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+            const listing = currentListings.find(l => l.listing_id === listingId);
+            if (listing) currentSelectedListing = listing;
+
+            closeModal('cart-modal');
+            openModal('booking-modal');
+        }
+
+        async function processPaymentAndBookMeeting() {
+            const consent = document.getElementById('legal-staff-consent').checked;
+            if (!consent) {
+                alert('중개보조원이 상담을 진행한다는 법적 고지사항에 필수 동의해야 합니다.');
+                return;
+            }
+
+            const startTime = document.getElementById('booking-datetime').value;
+            if (!startTime) {
+                alert('상담 희망 일시를 선택해주세요.');
+                return;
+            }
+
+            // Simulating PortOne Credit Card Payment & Backend Meeting Generation
+            try {
+                const res = await fetch('/api/payments/confirm', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({
+                        listing_id: currentSelectedListing.listing_id,
+                        start_time: startTime,
+                        amount: 50000,
+                        imp_uid: `imp_${Date.now()}`
+                    })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '결제 처리 실패');
+
+                closeModal('booking-modal');
+                alert(`신용카드 결제가 성공적으로 완료되었습니다!\n\nGoogle Meet 화상 미팅 링크가 생성되었습니다:\n${data.meeting.meet_link}\n\n마이페이지에서 예약 일정을 확인하실 수 있습니다.`);
+                showDashboardView();
+            } catch (err) {
+                alert(err.message);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // DASHBOARDS (MEMBER, STAFF, OWNER, ADMIN)
+        // -------------------------------------------------------------
+        async function showDashboardView() {
+            if (!currentUser) {
+                alert('로그인이 필요합니다.');
+                openModal('login-modal');
+                return;
+            }
+
+            document.getElementById('view-home').classList.add('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.remove('hidden');
+
+            const roleBadge = document.getElementById('dash-role-badge');
+            const title = document.getElementById('dash-title');
+            const userInfo = document.getElementById('dash-user-info');
+            const content = document.getElementById('dashboard-dynamic-content');
+
+            roleBadge.innerText = currentUser.role;
+            userInfo.innerText = `${currentUser.nickname} (${currentUser.email})`;
+
+            if (currentUser.role === 'MEMBER') {
+                title.innerText = '회원 마이페이지 (미팅 및 결제 관리)';
+                await renderMemberDashboard(content);
+            } else if (currentUser.role === 'STAFF') {
+                title.innerText = '중개보조원(Staff) 전용 대시보드';
+                await renderStaffDashboard(content);
+            } else if (currentUser.role === 'OWNER') {
+                title.innerText = '개업공인중개사(Owner) 통합 포털';
+                await renderOwnerDashboard(content);
+            } else if (currentUser.role === 'ADMIN') {
+                title.innerText = '웹서버 관리자(Admin) 콘솔';
+                await renderAdminDashboard(content);
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Member Dashboard
+        async function renderMemberDashboard(container) {
+            const res = await fetch('/api/meetings/member', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            const meetings = await res.json();
+
+            let meetingsHtml = '';
+            if (meetings.length === 0) {
+                meetingsHtml = `<p class="text-xs text-black/40 py-4">확정된 Google Meet 회의 일정이 없습니다.</p>`;
+            } else {
+                meetings.forEach(m => {
+                    meetingsHtml += `
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px] uppercase">${m.status}</span>
+                                    <h4 class="font-serif italic text-base text-[#1A1A1A] mt-1">${m.listing_title}</h4>
+                                    <p class="text-black/60 text-[11px] mt-0.5">상담 일시: ${m.start_time.replace('T', ' ')}</p>
+                                    <p class="text-[#3A5A40] text-[11px]">담당 중개보조원: ${m.assistant_nickname} (${m.assistant_phone})</p>
+                                </div>
+                                <div class="flex flex-col items-end space-y-1">
+                                    <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition">
+                                        <i class="fa-solid fa-video"></i> Meet 입장
+                                    </a>
+                                    ${m.status !== 'CANCELLED_REFUNDED' ? `
+                                        <button onclick="cancelMeetingRefund('${m.meeting_id}')" class="text-rose-700 hover:underline text-[11px]">
+                                            결제 취소 / 환불 신청
+                                        </button>
+                                    ` : '<span class="text-rose-700 font-bold text-[11px]">환불 처리됨</span>'}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            container.innerHTML = `
+                <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                    <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-check text-[#3A5A40]"></i> 확정 및 완료된 Google Meet 회의 일정
+                    </h3>
+                    <div class="space-y-3">
+                        ${meetingsHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function cancelMeetingRefund(meetingId) {
+            if (!confirm('정말로 Google Meet 상담 결제를 취소하고 환불을 진행하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                alert(data.message || '환불 처리되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert('환불 처리에 실패했습니다.');
+            }
+        }
+
+        // Staff Dashboard
+        // Privacy Isolation: Staff can ONLY see Member ID & Nickname!
+        async function renderStaffDashboard(container) {
+            const resMeets = await fetch('/api/meetings/staff', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            const meetings = await resMeets.json();
+
+            let meetsHtml = '';
+            if (meetings.length === 0) {
+                meetsHtml = `<p class="text-xs text-black/40 py-4">배정된 미팅 일정이 없습니다.</p>`;
+            } else {
+                meetings.forEach(m => {
+                    meetsHtml += `
+                        <div class="p-3 bg-[#F5F2ED] border border-black/10 space-y-1 text-xs">
+                            <div class="flex justify-between items-center">
+                                <span class="font-serif italic text-sm text-[#1A1A1A]">${m.listing_title}</span>
+                                <span class="text-[#3A5A40] font-mono text-[10px] font-bold">${m.status}</span>
+                            </div>
+                            <div class="text-[11px] text-black/60">일시: ${m.start_time.replace('T', ' ')}</div>
+                            <div class="text-[11px] text-[#3A5A40] font-bold bg-white p-2 border border-black/10 flex justify-between items-center">
+                                <span>예약자: ID (${m.member_id}) / 별명 (${m.member_nickname})</span>
+                                <span class="text-rose-700 text-[10px]">* 고객 개인정보 보호 규정으로 실명/연락처 마스킹됨</span>
+                            </div>
+                            <div class="pt-1 flex justify-end space-x-2">
+                                <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-2.5 py-1 text-[11px] font-bold uppercase transition">
+                                    Meet 주재하기
+                                </a>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Staff Personal Profile Form -->
+                    <div class="lg:col-span-5 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                            <i class="fa-solid fa-id-badge text-[#3A5A40]"></i> 중개보조원 개인정보 입력/수정
+                        </h3>
+                        <form onsubmit="handleUpdateStaffProfile(event)" class="space-y-3 text-xs">
+                            <div>
+                                <label class="block text-black/60 mb-1">별명</label>
+                                <input type="text" id="staff-edit-nickname" value="${currentUser.nickname}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                            </div>
+                            <div>
+                                <label class="block text-black/60 mb-1">전화번호</label>
+                                <input type="text" id="staff-edit-phone" value="010-3333-4444" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                            </div>
+                            <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition">
+                                프로필 수정 저장
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Staff Meetings List -->
+                    <div class="lg:col-span-7 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> 미팅 예정 및 완료 내역
+                            </h3>
+                            <button onclick="openModal('add-listing-modal')" class="bg-[#3A5A40] text-white text-[11px] font-bold px-3 py-1 uppercase">
+                                + 매물 수집 등록
+                            </button>
+                        </div>
+                        <div class="space-y-3">
+                            ${meetsHtml}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function handleUpdateStaffProfile(e) {
+            e.preventDefault();
+            const nickname = document.getElementById('staff-edit-nickname').value;
+            const phone_number = document.getElementById('staff-edit-phone').value;
+
+            try {
+                const res = await fetch('/api/staff/profile', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ nickname, phone_number })
+                });
+                alert('프로필이 저장되었습니다.');
+                currentUser.nickname = nickname;
+                updateAuthUI();
+            } catch (err) {
+                alert('저장 실패');
+            }
+        }
+
+        // Owner Portal
+        // Owner can see ALL Members full info, Staff info, Listings
+        async function renderOwnerDashboard(container) {
+            const res = await fetch('/api/owner/data', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            const data = await res.json();
+
+            let membersRows = '';
+            data.members.forEach(m => {
+                membersRows += `
+                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
+                        <td class="p-2.5 font-mono">${m.user_id}</td>
+                        <td class="p-2.5 font-bold">${m.name}</td>
+                        <td class="p-2.5 text-[#3A5A40]">${m.email}</td>
+                        <td class="p-2.5">${m.nickname}</td>
+                        <td class="p-2.5 font-medium">${m.phone_number}</td>
+                    </tr>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="bg-white p-6 border border-black/10 space-y-6 shadow-sm">
+                    <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                            <i class="fa-solid fa-users text-[#3A5A40]"></i> 전체 회원 개인정보 종합 관리 (Owner 총괄)
+                        </h3>
+                        <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 border border-[#3A5A40]/30 font-medium">
+                            모든 회원의 실명, 이메일, 전화번호 접근 열람 허용
+                        </span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
+                                <tr>
+                                    <th class="p-2.5">회원 ID</th>
+                                    <th class="p-2.5">실명</th>
+                                    <th class="p-2.5">이메일 계정</th>
+                                    <th class="p-2.5">별명</th>
+                                    <th class="p-2.5">연락처</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${membersRows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Admin Console
+        // Admin can edit Owner Legal Metadata for Header & Footer, Manage Users and Roles
+        let currentAdminUsers = [];
+
+        async function renderAdminDashboard(container) {
+            const resUsers = await fetch('/api/admin/users', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            currentAdminUsers = await resUsers.json();
+
+            let usersRows = '';
+            currentAdminUsers.forEach(u => {
+                usersRows += `
+                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
+                        <td class="p-2 font-mono text-[11px]">${u.user_id}</td>
+                        <td class="p-2 text-[#3A5A40] font-medium">${u.email}</td>
+                        <td class="p-2 font-bold">${u.nickname}</td>
+                        <td class="p-2">
+                            <select onchange="changeUserRoleDirectly('${u.user_id}', this.value)" class="bg-[#F5F2ED] border border-black/15 text-[10px] text-[#3A5A40] font-bold p-1 rounded focus:outline-none focus:border-[#3A5A40] cursor-pointer">
+                                <option value="ADMIN" ${u.role === 'ADMIN' ? 'selected' : ''}>ADMIN</option>
+                                <option value="OWNER" ${u.role === 'OWNER' ? 'selected' : ''}>OWNER</option>
+                                <option value="STAFF" ${u.role === 'STAFF' ? 'selected' : ''}>STAFF</option>
+                                <option value="MEMBER" ${u.role === 'MEMBER' ? 'selected' : ''}>MEMBER</option>
+                            </select>
+                        </td>
+                        <td class="p-2 whitespace-nowrap">
+                            <button onclick="openEditUserModal('${u.user_id}')" class="text-[#3A5A40] hover:underline font-bold mr-2 text-[11px]">
+                                수정
+                            </button>
+                            <button onclick="deleteAdminUser('${u.user_id}')" class="text-rose-700 hover:underline text-[11px]">
+                                삭제
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            container.innerHTML = `
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Owner Legal Metadata Config Editor (Header & Footer Dynamic Binding) -->
+                    <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-[#3A5A40]"></i> 개업공인중개사 법적 공시 메타데이터 설정 (Admin)
+                        </h3>
+                        <form onsubmit="handleSaveOwnerConfig(event)" class="space-y-3 text-xs">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-black/60 mb-1">중개사무소 상호명</label>
+                                    <input type="text" id="admin-office-name" value="${ownerConfig.office_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <div>
+                                    <label class="block text-black/60 mb-1">대표자 성명</label>
+                                    <input type="text" id="admin-owner-name" value="${ownerConfig.owner_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-black/60 mb-1">사업장 주소</label>
+                                <input type="text" id="admin-address" value="${ownerConfig.address || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-black/60 mb-1">사업자등록번호</label>
+                                    <input type="text" id="admin-biz-num" value="${ownerConfig.business_reg_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <div>
+                                    <label class="block text-black/60 mb-1">영업허가 등록번호</label>
+                                    <input type="text" id="admin-lic-num" value="${ownerConfig.license_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-black/60 mb-1">대표 무선연락처</label>
+                                    <input type="text" id="admin-mobile" value="${ownerConfig.mobile_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <div>
+                                    <label class="block text-black/60 mb-1">대표 유선전화</label>
+                                    <input type="text" id="admin-landline" value="${ownerConfig.landline_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2">
+                                <div>
+                                    <label class="block text-black/60 mb-1">팩스 번호</label>
+                                    <input type="text" id="admin-fax" value="${ownerConfig.fax_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <div>
+                                    <label class="block text-black/60 mb-1">공식 이메일</label>
+                                    <input type="email" id="admin-email" value="${ownerConfig.email || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition mt-2">
+                                Header & Footer 전역 동적 바인딩 저장
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- User Management Table -->
+                    <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-users-gear text-[#3A5A40]"></i> 사용자 계정 및 권한 제어
+                            </h3>
+                            <span class="text-[10px] text-[#3A5A40] bg-[#3A5A40]/10 px-2.5 py-1 font-bold border border-[#3A5A40]/30">
+                                Admin 전역 편집 권한
+                            </span>
+                        </div>
+                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
+                                    <tr>
+                                        <th class="p-2">ID</th>
+                                        <th class="p-2">이메일</th>
+                                        <th class="p-2">별명</th>
+                                        <th class="p-2">권한</th>
+                                        <th class="p-2">관리</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${usersRows}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openEditUserModal(userId) {
+            const user = currentAdminUsers.find(u => u.user_id === userId);
+            if (!user) return;
+
+            document.getElementById('edit-user-id').value = user.user_id;
+            document.getElementById('edit-user-id-display').value = user.user_id;
+            document.getElementById('edit-user-email').value = user.email || '';
+            document.getElementById('edit-user-nickname').value = user.nickname || '';
+            document.getElementById('edit-user-name').value = user.name || '';
+            document.getElementById('edit-user-phone').value = user.phone_number || '';
+            document.getElementById('edit-user-role').value = user.role || 'MEMBER';
+
+            openModal('edit-user-modal');
+        }
+
+        async function handleSaveEditUser(e) {
+            e.preventDefault();
+            const userId = document.getElementById('edit-user-id').value;
+            const email = document.getElementById('edit-user-email').value;
+            const nickname = document.getElementById('edit-user-nickname').value;
+            const name = document.getElementById('edit-user-name').value;
+            const phone_number = document.getElementById('edit-user-phone').value;
+            const role = document.getElementById('edit-user-role').value;
+
+            try {
+                const res = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ email, nickname, name, phone_number, role })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '수정 실패');
+
+                closeModal('edit-user-modal');
+                alert('사용자 계정 정보 및 권한이 업데이트되었습니다.');
+                await showDashboardView();
+            } catch (err) {
+                alert(`[수정 실패] ${err.message}`);
+            }
+        }
+
+        async function changeUserRoleDirectly(userId, newRole) {
+            try {
+                const res = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ role: newRole })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '권한 변경 실패');
+
+                alert(`사용자(${userId})의 권한이 '${newRole}'(으)로 변경되었습니다.`);
+            } catch (err) {
+                alert(`[권한 변경 실패] ${err.message}`);
+                await showDashboardView();
+            }
+        }
+
+        async function handleSaveOwnerConfig(e) {
+            e.preventDefault();
+            const configData = {
+                office_name: document.getElementById('admin-office-name').value,
+                owner_name: document.getElementById('admin-owner-name').value,
+                address: document.getElementById('admin-address').value,
+                business_reg_num: document.getElementById('admin-biz-num').value,
+                license_num: document.getElementById('admin-lic-num').value,
+                mobile_phone: document.getElementById('admin-mobile').value,
+                landline_phone: document.getElementById('admin-landline').value,
+                fax_num: document.getElementById('admin-fax').value,
+                email: document.getElementById('admin-email').value
+            };
+
+            try {
+                const res = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify(configData)
+                });
+                const data = await res.json();
+                ownerConfig = data.config;
+                updateLegalHeaderFooterUI(ownerConfig);
+                alert('개업공인중개사 메타데이터가 플랫폼 전역 Header 및 Footer에 실시간으로 업데이트 되었습니다!');
+            } catch (err) {
+                alert('저장 실패');
+            }
+        }
+
+        async function deleteAdminUser(userId) {
+            if (!confirm('정말로 이 사용자를 삭제하시겠습니까?')) return;
+            try {
+                await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                showDashboardView();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // STAFF LAND LISTING CREATION (3 RESTRICTED ZONES CHECK)
+        // -------------------------------------------------------------
+        async function handleCreateListingSubmit(e) {
+            e.preventDefault();
+            const title = document.getElementById('new-title').value;
+            const address = document.getElementById('new-address').value;
+            const jimok_official = document.getElementById('new-jimok').value;
+            const area_sqm = document.getElementById('new-area').value;
+            const price = document.getElementById('new-price').value;
+            const zoning_district = document.getElementById('new-zoning').value;
+            const road_access = document.getElementById('new-road').value;
+            const youtube_url = document.getElementById('new-youtube').value;
+
+            try {
+                const res = await fetch('/api/listings', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url })
+                });
+
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '매물 등록 거절');
+
+                closeModal('add-listing-modal');
+                alert('토지 매물이 성공적으로 검증 및 수집 등록 되었습니다!');
+                await fetchListings();
+            } catch (err) {
+                alert(`[등록 실패] ${err.message}`);
+            }
+        }
+
+        // -------------------------------------------------------------
+        // NAVIGATION HELPERS
+        // -------------------------------------------------------------
+        function showHomeView() {
+            document.getElementById('view-home').classList.remove('hidden');
+            document.getElementById('view-detail').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.add('hidden');
+        }
+
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        function scrollToSection(id) {
+            showHomeView();
+            const el = document.getElementById(id);
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // Security key shortcuts blocking
+        document.addEventListener('keydown', function(e) {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 's')) {
+                e.preventDefault();
+            }
+            if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+                e.preventDefault();
+            }
+        });
+    </script>
+</body>
+</html>
