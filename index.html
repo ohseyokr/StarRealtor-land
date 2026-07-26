@@ -1702,21 +1702,33 @@
                 meetingsHtml = `<p class="text-xs text-black/40 py-4">확정된 Google Meet 회의 일정이 없습니다.</p>`;
             } else {
                 meetings.forEach(m => {
+                    const isSynced = m.google_meet_api_synced;
                     meetingsHtml += `
                         <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px] uppercase">${m.status}</span>
+                                    <div class="flex items-center gap-2">
+                                        <span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px] uppercase">${m.status}</span>
+                                        ${isSynced ? `
+                                            <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 border border-blue-200 text-[10px] flex items-center gap-1">
+                                                <i class="fa-solid fa-cloud-check text-blue-600"></i> Google Calendar/Meet API 연동됨
+                                            </span>
+                                        ` : `
+                                            <span class="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 border border-emerald-200 text-[10px] flex items-center gap-1">
+                                                <i class="fa-solid fa-video text-emerald-600"></i> Google Meet 화상 회의 준비
+                                            </span>
+                                        `}
+                                    </div>
                                     <h4 class="font-serif italic text-base text-[#1A1A1A] mt-1">${m.listing_title}</h4>
                                     <p class="text-black/60 text-[11px] mt-0.5">상담 일시: ${m.start_time.replace('T', ' ')}</p>
                                     <p class="text-[#3A5A40] text-[11px]">담당 중개보조원: ${m.assistant_nickname} (${m.assistant_phone})</p>
                                 </div>
                                 <div class="flex flex-col items-end space-y-1">
-                                    <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition">
-                                        <i class="fa-solid fa-video"></i> Meet 입장
+                                    <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition shadow-sm">
+                                        <i class="fa-solid fa-video"></i> Google Meet 입장
                                     </a>
                                     ${m.status !== 'CANCELLED_REFUNDED' ? `
-                                        <button onclick="cancelMeetingRefund('${m.meeting_id}')" class="text-rose-700 hover:underline text-[11px]">
+                                        <button onclick="cancelMeetingRefund('${m.meeting_id}')" class="text-rose-700 hover:underline text-[11px] pt-1">
                                             결제 취소 / 환불 신청
                                         </button>
                                     ` : '<span class="text-rose-700 font-bold text-[11px]">환불 처리됨</span>'}
@@ -1768,19 +1780,33 @@
             } else {
                 meetings.forEach(m => {
                     meetsHtml += `
-                        <div class="p-3 bg-[#F5F2ED] border border-black/10 space-y-1 text-xs">
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
                             <div class="flex justify-between items-center">
-                                <span class="font-serif italic text-sm text-[#1A1A1A]">${m.listing_title}</span>
-                                <span class="text-[#3A5A40] font-mono text-[10px] font-bold">${m.status}</span>
+                                <span class="font-serif italic text-sm text-[#1A1A1A] font-bold">${m.listing_title}</span>
+                                <div class="flex items-center gap-2">
+                                    <select onchange="updateStaffMeetingStatus('${m.meeting_id}', this.value)" class="bg-white border border-black/20 text-[#3A5A40] font-bold text-[11px] p-1 rounded focus:outline-none focus:border-[#3A5A40]">
+                                        <option value="CONFIRMED" ${m.status === 'CONFIRMED' ? 'selected' : ''}>CONFIRMED (예약확정)</option>
+                                        <option value="COMPLETED" ${m.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED (상담완료)</option>
+                                        <option value="CANCELLED_REFUNDED" ${m.status === 'CANCELLED_REFUNDED' ? 'selected' : ''}>CANCELLED (취소됨)</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div class="text-[11px] text-black/60">일시: ${m.start_time.replace('T', ' ')}</div>
+                            <div class="text-[11px] text-black/70 flex justify-between items-center">
+                                <span>상담일시: <strong>${m.start_time.replace('T', ' ')}</strong></span>
+                                <span class="text-[10px] text-blue-800 bg-blue-50 border border-blue-200 px-1.5 py-0.5">
+                                    Google Meet 연동 상태: ${m.google_meet_api_synced ? 'API 동기화 완료' : 'Meet 링크 준비됨'}
+                                </span>
+                            </div>
                             <div class="text-[11px] text-[#3A5A40] font-bold bg-white p-2 border border-black/10 flex justify-between items-center">
-                                <span>예약자: ID (${m.member_id}) / 별명 (${m.member_nickname})</span>
+                                <span>예약 회원: ID (${m.member_id}) / 별명 (${m.member_nickname})</span>
                                 <span class="text-rose-700 text-[10px]">* 고객 개인정보 보호 규정으로 실명/연락처 마스킹됨</span>
                             </div>
-                            <div class="pt-1 flex justify-end space-x-2">
-                                <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-2.5 py-1 text-[11px] font-bold uppercase transition">
-                                    Meet 주재하기
+                            <div class="pt-1 flex justify-between items-center border-t border-black/10">
+                                <button onclick="regenerateStaffGoogleMeet('${m.meeting_id}')" class="text-[#3A5A40] hover:underline font-bold text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-arrows-rotate"></i> Google Meet API 일정/링크 갱신
+                                </button>
+                                <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-3 py-1.5 text-[11px] font-bold uppercase transition flex items-center gap-1">
+                                    <i class="fa-solid fa-video"></i> Meet 주재하기
                                 </a>
                             </div>
                         </div>
@@ -1847,6 +1873,43 @@
                 updateAuthUI();
             } catch (err) {
                 alert('저장 실패');
+            }
+        }
+
+        async function updateStaffMeetingStatus(meetingId, newStatus) {
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/status`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ status: newStatus })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '상태 업데이트 실패');
+                alert(`미팅 상태가 '${newStatus}'(으)로 업데이트되었습니다.`);
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
+        async function regenerateStaffGoogleMeet(meetingId) {
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/google-meet`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Meet 연동 실패');
+                alert(data.message || 'Google Meet API 일정이 성공적으로 생성/갱신되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert(`[Google Meet API 연동 오류] ${err.message}`);
             }
         }
 
