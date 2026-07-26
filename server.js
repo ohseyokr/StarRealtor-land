@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import multer from 'multer';
 import { S3Client } from '@aws-sdk/client-s3';
 import { OAuth2Client } from 'google-auth-library';
+import { google } from 'googleapis';
 import { PDFDocument, rgb, StandardFonts, degrees } from 'pdf-lib';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -472,9 +473,11 @@ app.get('/api/auth/google/url', (req, res) => {
     access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email'
+      'https://www.googleapis.com/auth/userinfo.email',
+      'https://www.googleapis.com/auth/calendar.events',
+      'https://www.googleapis.com/auth/meetings.space.created'
     ],
-    prompt: 'select_account'
+    prompt: 'consent'
   });
 
   res.json({ url: authUrl, redirectUri });
@@ -579,6 +582,10 @@ const handleGoogleCallback = async (req, res) => {
           console.warn('PostgreSQL DB update admin role warning:', e.message);
         }
       }
+    }
+
+    if (user) {
+      user.google_tokens = tokens;
     }
 
     const token = jwt.sign(
@@ -1113,8 +1120,82 @@ app.delete('/api/cart/:listing_id', authenticateToken, (req, res) => {
   res.json({ success: true });
 });
 
+// Helper to create Google Meet / Google Calendar Event via API
+async function createGoogleMeetEvent({ summary, description, startTime, memberEmail, staffEmail, tokens, req }) {
+  const fallbackMeetCode = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
+  const fallbackLink = `https://meet.google.com/${fallbackMeetCode}`;
+
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret || clientId === 'dummy_client_id') {
+    return { meetLink: fallbackLink, synced: false, error: 'Google OAuth credentials not configured.' };
+  }
+
+  try {
+    const redirectUri = req ? getRedirectUri(req) : '';
+    const oauth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
+
+    if (tokens && tokens.access_token) {
+      oauth2Client.setCredentials(tokens);
+    }
+
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+
+    let startDateTime = new Date(startTime);
+    if (isNaN(startDateTime.getTime())) {
+      startDateTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    }
+    const endDateTime = new Date(startDateTime.getTime() + 45 * 60 * 1000);
+
+    const attendees = [];
+    if (memberEmail && memberEmail.includes('@')) attendees.push({ email: memberEmail });
+    if (staffEmail && staffEmail.includes('@')) attendees.push({ email: staffEmail });
+
+    const event = {
+      summary: summary || '[스타부동산] 토지 현장 및 법률 분석 Google Meet 화상 상담',
+      description: description || '스타부동산 플랫폼 토지 분석 화상 상담 예약',
+      start: { dateTime: startDateTime.toISOString() },
+      end: { dateTime: endDateTime.toISOString() },
+      conferenceData: {
+        createRequest: {
+          requestId: `meet-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          conferenceSolutionKey: {
+            type: 'hangoutsMeet'
+          }
+        }
+      },
+      attendees
+    };
+
+    const calendarRes = await calendar.events.insert({
+      calendarId: 'primary',
+      resource: event,
+      conferenceDataVersion: 1
+    });
+
+    const hangoutLink = calendarRes.data.hangoutLink || 
+      calendarRes.data.conferenceData?.entryPoints?.find(ep => ep.entryPointType === 'video')?.uri || 
+      fallbackLink;
+
+    return {
+      meetLink: hangoutLink,
+      synced: true,
+      eventId: calendarRes.data.id,
+      htmlLink: calendarRes.data.htmlLink
+    };
+  } catch (err) {
+    console.warn('Google Meet API Creation Note:', err.message);
+    return {
+      meetLink: fallbackLink,
+      synced: false,
+      error: err.message
+    };
+  }
+}
+
 // 5. Payment & Google Meet Meetings Endpoints
-app.post('/api/payments/confirm', authenticateToken, (req, res) => {
+app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
   const { listing_id, start_time, imp_uid, merchant_uid, amount } = req.body;
   if (!listing_id || !start_time) {
     return res.status(400).json({ error: '매물 ID와 미팅 시간은 필수 항목입니다.' });
@@ -1125,6 +1206,7 @@ app.post('/api/payments/confirm', authenticateToken, (req, res) => {
 
   const staff = inMemoryDB.users.find(u => u.user_id === listing.assistant_id) || {
     nickname: listing.assistant_nickname,
+    email: 'staff@starrealtor-land.co.kr',
     phone_number: '010-3333-4444'
   };
 
@@ -1134,8 +1216,19 @@ app.post('/api/payments/confirm', authenticateToken, (req, res) => {
     phone_number: '010-0000-0000'
   };
 
+  const userTokens = req.user.google_tokens || member.google_tokens || staff.google_tokens;
+
+  const meetResult = await createGoogleMeetEvent({
+    summary: `[스타부동산] ${listing.title} 토지분석 Google Meet 화상 상담`,
+    description: `매물명: ${listing.title}\n상담일시: ${start_time}\n회원 닉네임: ${member.nickname}\n담당 보조원: ${staff.nickname}`,
+    startTime: start_time,
+    memberEmail: member.email,
+    staffEmail: staff.email,
+    tokens: userTokens,
+    req
+  });
+
   const meetingId = `m-${Date.now()}`;
-  const meetLink = `https://meet.google.com/lnd-${Math.random().toString(36).substring(2, 8)}`;
 
   const newMeeting = {
     meeting_id: meetingId,
@@ -1148,7 +1241,9 @@ app.post('/api/payments/confirm', authenticateToken, (req, res) => {
     assistant_id: listing.assistant_id,
     assistant_nickname: listing.assistant_nickname,
     assistant_phone: staff.phone_number,
-    meet_link: meetLink,
+    meet_link: meetResult.meetLink,
+    google_meet_api_synced: meetResult.synced,
+    google_calendar_event_id: meetResult.eventId || null,
     start_time,
     status: 'CONFIRMED',
     amount: amount || 50000,
@@ -1161,7 +1256,14 @@ app.post('/api/payments/confirm', authenticateToken, (req, res) => {
   // Clear from cart if present
   inMemoryDB.carts = inMemoryDB.carts.filter(c => !(c.member_id === req.user.id && c.listing_id === listing_id));
 
-  res.json({ success: true, meeting: newMeeting });
+  res.json({
+    success: true,
+    meeting: newMeeting,
+    meet_api_synced: meetResult.synced,
+    message: meetResult.synced
+      ? 'Google Calendar & Meet API와 성공적으로 연동하여 화상 미팅 일정이 예약되었습니다!'
+      : '상담료 결제 및 Google Meet 화상 회의 링크 생성이 완료되었습니다.'
+  });
 });
 
 // Get Member's Meetings (MyPage)
@@ -1213,6 +1315,7 @@ app.get('/api/meetings/staff', authenticateToken, (req, res) => {
           member_email: '***@***.*** (마스킹됨)',
           member_phone: '010-****-**** (마스킹됨)',
           meet_link: m.meet_link,
+          google_meet_api_synced: m.google_meet_api_synced || false,
           start_time: m.start_time,
           status: m.status,
           created_at: m.created_at
@@ -1224,8 +1327,45 @@ app.get('/api/meetings/staff', authenticateToken, (req, res) => {
   res.json(staffMeetings);
 });
 
+// Staff/Admin Regenerate Google Meet API Link
+app.post('/api/meetings/:id/google-meet', authenticateToken, async (req, res) => {
+  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '중개보조원(Staff) 또는 관리자 권한이 필요합니다.' });
+  }
+
+  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
+  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+
+  const staff = inMemoryDB.users.find(u => u.user_id === req.user.id) || req.user;
+  const member = inMemoryDB.users.find(u => u.user_id === meeting.member_id);
+
+  const meetResult = await createGoogleMeetEvent({
+    summary: `[스타부동산] ${meeting.listing_title} 화상상담`,
+    description: `매물명: ${meeting.listing_title}\n상담일시: ${meeting.start_time}\n담당자: ${staff.nickname}`,
+    startTime: meeting.start_time,
+    memberEmail: member?.email || meeting.member_email,
+    staffEmail: staff?.email,
+    tokens: staff.google_tokens || req.user.google_tokens,
+    req
+  });
+
+  meeting.meet_link = meetResult.meetLink;
+  meeting.google_meet_api_synced = meetResult.synced;
+  meeting.google_calendar_event_id = meetResult.eventId || null;
+
+  res.json({
+    success: true,
+    meet_link: meeting.meet_link,
+    synced: meetResult.synced,
+    message: meetResult.synced
+      ? 'Google Calendar 및 Meet API 연동 회의 일정이 성공적으로 생성되었습니다.'
+      : 'Google Meet 회의 링크가 업데이트되었습니다.',
+    meeting
+  });
+});
+
 // Staff/Admin Updates Meeting Status or Schedule
-app.put('/api/meetings/:id/status', authenticateToken, (req, res) => {
+app.put('/api/meetings/:id/status', authenticateToken, async (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
     return res.status(403).json({ error: '권한이 없습니다.' });
   }
@@ -1235,7 +1375,22 @@ app.put('/api/meetings/:id/status', authenticateToken, (req, res) => {
 
   const { status, start_time } = req.body;
   if (status) meeting.status = status;
-  if (start_time) meeting.start_time = start_time;
+  if (start_time) {
+    meeting.start_time = start_time;
+    // Auto sync with Google Meet API if rescheduled
+    const staff = inMemoryDB.users.find(u => u.user_id === req.user.id) || req.user;
+    const meetResult = await createGoogleMeetEvent({
+      summary: `[스타부동산-변경] ${meeting.listing_title} 화상상담`,
+      description: `[일정변경] 매물: ${meeting.listing_title}\n신규 상담일시: ${start_time}`,
+      startTime: start_time,
+      memberEmail: meeting.member_email,
+      staffEmail: staff.email,
+      tokens: staff.google_tokens || req.user.google_tokens,
+      req
+    });
+    meeting.meet_link = meetResult.meetLink;
+    meeting.google_meet_api_synced = meetResult.synced;
+  }
 
   res.json({ success: true, meeting });
 });
