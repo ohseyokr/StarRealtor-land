@@ -18,12 +18,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+app.set('trust proxy', true);
 const PORT = 3000;
 
 app.use(cors());
 app.use(express.json());
 
 const JWT_SECRET = process.env.JWT_SECRET || 'starrealtor_land_jwt_secret_key_2026';
+
+// Helper function to get consistent OAuth Redirect URI
+const getRedirectUri = (req) => {
+  if (process.env.APP_URL && process.env.APP_URL.trim()) {
+    const cleanAppUrl = process.env.APP_URL.trim().replace(/\/+$/, '');
+    return `${cleanAppUrl}/api/auth/google/callback`;
+  }
+  const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
+  const host = req.get('host');
+  return `${protocol}://${host}/api/auth/google/callback`;
+};
 
 // Hybrid Database Setup (PostgreSQL Pool with fallback to in-memory store)
 const { Pool } = pg;
@@ -441,8 +453,7 @@ app.get('/api/auth/google/config', (req, res) => {
 
 // Auth - Google OAuth2.0 Authorization URL Construction
 app.get('/api/auth/google/url', (req, res) => {
-  const clientOrigin = req.query.origin || `${req.protocol}://${req.get('host')}`;
-  const redirectUri = `${clientOrigin}/api/auth/google/callback`;
+  const redirectUri = getRedirectUri(req);
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || clientId === 'dummy_client_id') {
@@ -477,9 +488,7 @@ const handleGoogleCallback = async (req, res) => {
       return res.status(400).send('OAuth 인가 코드가 전달되지 않았습니다.');
     }
 
-    const host = req.get('host');
-    const protocol = req.protocol;
-    const redirectUri = `${protocol}://${host}/api/auth/google/callback`;
+    const redirectUri = getRedirectUri(req);
 
     const client = new OAuth2Client(
       process.env.GOOGLE_CLIENT_ID,
@@ -618,10 +627,14 @@ const handleGoogleCallback = async (req, res) => {
     console.error('Google OAuth Callback Exception:', err);
 
     const isInvalidClient = err.message && (err.message.includes('invalid_client') || err.message.includes('401'));
+    const isRedirectMismatch = err.message && (err.message.includes('redirect_uri_mismatch') || err.message.includes('redirect_uri'));
     
     let errorTitle = 'Google OAuth 로그인 오류';
     let errorMessage = err.message || '알 수 없는 인증 오류가 발생했습니다.';
     let solutionGuide = '';
+
+    const currentRedirectUri = getRedirectUri(req);
+    const currentOrigin = currentRedirectUri.replace(/\/api\/auth\/google\/callback$/, '');
 
     if (isInvalidClient) {
       errorTitle = 'Google OAuth 보안 인증 실패 (invalid_client)';
@@ -634,6 +647,26 @@ const handleGoogleCallback = async (req, res) => {
             <li><strong>해결 단계 1:</strong> <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0066CC;">Google Cloud Console API &amp; 서비스 -&gt; 사용자 인증 정보</a>에 접속합니다.</li>
             <li><strong>해결 단계 2:</strong> 해당 OAuth 2.0 클라이언트 ID의 <strong>'클라이언트 보안 비밀(Client Secret)'</strong> 전체 문자열을 다시 복사합니다.</li>
             <li><strong>해결 단계 3:</strong> Render.com 대시보드 <strong>Environment</strong> 탭에서 <code>GOOGLE_CLIENT_SECRET</code>에 별표(<code>*</code>) 없이 전체 원본 비밀번호를 수정 후 저장합니다.</li>
+          </ol>
+        </div>
+      `;
+    } else if (isRedirectMismatch) {
+      errorTitle = 'Google OAuth 리디렉션 URI 불일치 (redirect_uri_mismatch)';
+      errorMessage = 'Google Cloud Console에 등록된 승인된 리디렉션 URI와 서버에서 요청한 주소가 일치하지 않습니다.';
+      solutionGuide = `
+        <div style="background:#FFF8F6; border:1px solid #FFD0C7; padding:16px; border-radius:6px; margin-top:16px; text-align:left;">
+          <h4 style="color:#D9381E; margin-top:0; margin-bottom:8px; font-size:14px;">🛠️ 해결 방법 (Google Cloud Console 설정 수정)</h4>
+          <p style="font-size:13px; color:#444; margin-bottom:10px;">아래 주소를 <strong>Google Cloud Console</strong>의 OAuth 2.0 클라이언트 설정에 등록해주세요:</p>
+          <ol style="margin:0; padding-left:20px; color:#444; font-size:13px; line-height:1.7;">
+            <li><a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#0066CC; font-weight:bold;">Google Cloud Console API &amp; 서비스 -&gt; 사용자 인증 정보</a> 접속</li>
+            <li>사용 중인 <strong>OAuth 2.0 클라이언트 ID</strong> 클릭</li>
+            <li><strong>'승인된 자바스크립트 원본' (Authorized JavaScript origins)</strong> 항목에 추가:<br/>
+                <code style="background:#EAEAEA; padding:2px 6px; border-radius:4px; font-weight:bold; color:#000;">${currentOrigin}</code>
+            </li>
+            <li><strong>'승인된 리디렉션 URI' (Authorized redirect URIs)</strong> 항목에 추가:<br/>
+                <code style="background:#EAEAEA; padding:2px 6px; border-radius:4px; font-weight:bold; color:#000;">${currentRedirectUri}</code>
+            </li>
+            <li>하단 <strong>[저장]</strong> 클릭 후 1~2분 뒤 다시 로그인 시도</li>
           </ol>
         </div>
       `;
