@@ -247,13 +247,39 @@ const inMemoryDB = {
       assistant_phone: '010-3333-4444',
       meet_link: 'https://meet.google.com/new',
       start_time: '2026-08-01T14:00',
-      status: 'CONFIRMED', // CONFIRMED, COMPLETED, CANCELLED_REFUNDED
+      status: 'CONFIRMED', // CONFIRMED, CANCEL_REQUESTED, REFUND_APPROVAL_REQUESTED, CANCEL_APPROVED_REFUND_PENDING, CANCEL_REJECTED, REFUNDED, COMPLETED
       amount: 50000,
       imp_uid: 'imp_sample_99120',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
+      history: [
+        {
+          timestamp: new Date().toISOString(),
+          actor_role: 'MEMBER',
+          actor_nickname: '토지투자왕',
+          action: '상담예약 및 결제완료',
+          status: 'CONFIRMED',
+          note: '상담료 50,000원 결제 및 Google Meet 링크 생성 완료'
+        }
+      ]
     }
   ]
 };
+
+// Helper function to append meeting history
+function addMeetingHistory(meeting, { actor_role, actor_nickname, action, status, note }) {
+  if (!meeting.history) {
+    meeting.history = [];
+  }
+  meeting.status = status;
+  meeting.history.push({
+    timestamp: new Date().toISOString(),
+    actor_role,
+    actor_nickname: actor_nickname || '시스템',
+    action,
+    status,
+    note: note || ''
+  });
+}
 
 // Google OAuth Client setup
 const oauth2Client = new OAuth2Client(
@@ -1278,7 +1304,17 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
     status: 'CONFIRMED',
     amount: amount || 50000,
     imp_uid: imp_uid || `imp_${Date.now()}`,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
+    history: [
+      {
+        timestamp: new Date().toISOString(),
+        actor_role: 'MEMBER',
+        actor_nickname: member.nickname,
+        action: '상담예약 및 결제완료',
+        status: 'CONFIRMED',
+        note: `상담료 ${amount || 50000}원 결제 및 Google Meet 화상 상담 예약 완료`
+      }
+    ]
   };
 
   inMemoryDB.meetings.unshift(newMeeting);
@@ -1296,25 +1332,129 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
   });
 });
 
-// Get Member's Meetings (MyPage)
+// Get Member's Meetings & Selected Listings (MyPage)
 app.get('/api/meetings/member', authenticateToken, (req, res) => {
   const userMeetings = inMemoryDB.meetings.filter(m => m.member_id === req.user.id);
-  res.json(userMeetings);
+  const userCarts = inMemoryDB.carts.filter(c => c.member_id === req.user.id);
+  const selectedListings = userCarts.map(c => inMemoryDB.listings.find(l => l.listing_id === c.listing_id)).filter(Boolean);
+
+  res.json({
+    meetings: userMeetings,
+    selected_listings: selectedListings
+  });
 });
 
-// Cancel & Refund Meeting (Member or Admin)
-app.post('/api/meetings/:id/cancel', authenticateToken, (req, res) => {
+// 1. Member requests Google Meet cancellation ('취소요청')
+app.post('/api/meetings/:id/cancel-request', authenticateToken, (req, res) => {
   const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
   if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
 
   if (meeting.member_id !== req.user.id && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '권한이 없습니다.' });
+    return res.status(403).json({ error: '본인의 미팅만 취소 요청할 수 있습니다.' });
   }
 
-  meeting.status = 'CANCELLED_REFUNDED';
-  meeting.cancelled_at = new Date().toISOString();
+  addMeetingHistory(meeting, {
+    actor_role: 'MEMBER',
+    actor_nickname: req.user.nickname,
+    action: 'Google Meet 상담 취소 요청',
+    status: 'CANCEL_REQUESTED',
+    note: '회원이 마이페이지에서 Google Meet 화상 상담 취소 요청을 접수함'
+  });
 
-  res.json({ success: true, message: '결제 취소 및 환불 처리가 완료되었습니다.', meeting });
+  res.json({ success: true, message: 'Google Meet 상담 취소 요청이 접수되었습니다. 담당 중개보조원(Staff) 및 대표자(Owner) 승인 후 환불이 진행됩니다.', meeting });
+});
+
+// 2. Staff checks member's cancel request and forwards to Owner ('취소승인환불요청')
+app.post('/api/meetings/:id/staff-request-refund', authenticateToken, (req, res) => {
+  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+  }
+
+  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
+  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+
+  addMeetingHistory(meeting, {
+    actor_role: 'STAFF',
+    actor_nickname: req.user.nickname,
+    action: '취소승인 환불요청 (Owner 전송)',
+    status: 'REFUND_APPROVAL_REQUESTED',
+    note: '중개보조원이 회원의 취소 요청을 확인하고 개업공인중개사(Owner)에게 취소 승인 및 환불 검토를 요청함'
+  });
+
+  res.json({ success: true, message: '개업공인중개사(Owner)에게 취소 승인 및 환불 검토 요청이 전송되었습니다.', meeting });
+});
+
+// 2-B. Staff rejects member's cancel request ('취소요청거절')
+app.post('/api/meetings/:id/staff-reject-cancel', authenticateToken, (req, res) => {
+  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+  }
+
+  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
+  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+
+  addMeetingHistory(meeting, {
+    actor_role: 'STAFF',
+    actor_nickname: req.user.nickname,
+    action: '취소요청 거절',
+    status: 'CANCEL_REJECTED',
+    note: '중개보조원(Staff)이 회원의 취소 요청을 거절함. Google Meet 화상 상담 일정이 정상 유지됩니다.'
+  });
+
+  res.json({ success: true, message: '취소 요청이 거절되었습니다. 화상 상담 일정이 정상 유지됩니다.', meeting });
+});
+
+// 3. Owner approves ('취소승인-환불진행') or rejects ('취소반려-환불불가')
+app.post('/api/meetings/:id/owner-decision', authenticateToken, (req, res) => {
+  if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '개업공인중개사(Owner) 권한이 필요합니다.' });
+  }
+
+  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
+  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+
+  const { decision, note } = req.body;
+  if (decision === 'APPROVE') {
+    addMeetingHistory(meeting, {
+      actor_role: 'OWNER',
+      actor_nickname: req.user.nickname,
+      action: '취소승인 (환불진행 요청)',
+      status: 'CANCEL_APPROVED_REFUND_PENDING',
+      note: note || '대표자(Owner)가 미팅 취소 및 환불을 최종 승인함. 관리자(Admin) PG 결제 취소 환불 실행 대기'
+    });
+    res.json({ success: true, message: '대표자(Owner) 취소 승인이 완료되었습니다. 관리자(Admin)가 연결된 PG사 환불을 실행합니다.', meeting });
+  } else if (decision === 'REJECT') {
+    addMeetingHistory(meeting, {
+      actor_role: 'OWNER',
+      actor_nickname: req.user.nickname,
+      action: '취소반려 (환불불가)',
+      status: 'CANCEL_REJECTED',
+      note: note || '대표자(Owner)가 취소 요청을 반려함. Google Meet 화상 상담 일정이 정상 유효함'
+    });
+    res.json({ success: true, message: '취소 요청이 반려되었습니다. 상담 일정이 유지됩니다.', meeting });
+  } else {
+    res.status(400).json({ error: '올바른 승인/반려 결정을 선택해주세요.' });
+  }
+});
+
+// 4. Admin executes PG refund ('환불요청/환불실행')
+app.post('/api/meetings/:id/admin-execute-refund', authenticateToken, (req, res) => {
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
+  }
+
+  const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
+  if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
+
+  addMeetingHistory(meeting, {
+    actor_role: 'ADMIN',
+    actor_nickname: req.user.nickname,
+    action: 'PG 결제 취소 및 환불 실행',
+    status: 'REFUNDED',
+    note: '관리자(Admin)가 연동된 결제 PG사에 환불 요청 전송 및 환불 처리 완료'
+  });
+
+  res.json({ success: true, message: 'PG사 결제 취소 및 환불 실행이 최종 완료되었습니다.', meeting });
 });
 
 // Delete Meeting
@@ -1323,7 +1463,7 @@ app.delete('/api/meetings/:id', authenticateToken, (req, res) => {
   res.json({ success: true });
 });
 
-// Get Staff's Assigned Meetings (Staff Dashboard)
+// Get Staff's Assigned Meetings & Staff Registered Listings (Staff Dashboard)
 // CRITICAL REQUIREMENT 6: Staff can ONLY see Member ID and Nickname! No email, name, or phone!
 app.get('/api/meetings/staff', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
@@ -1348,13 +1488,19 @@ app.get('/api/meetings/staff', authenticateToken, (req, res) => {
           google_meet_api_synced: m.google_meet_api_synced || false,
           start_time: m.start_time,
           status: m.status,
+          history: m.history || [],
           created_at: m.created_at
         };
       }
       return m;
     });
 
-  res.json(staffMeetings);
+  const staffListings = inMemoryDB.listings.filter(l => l.assistant_id === req.user.id || req.user.role === 'ADMIN');
+
+  res.json({
+    meetings: staffMeetings,
+    listings: staffListings
+  });
 });
 
 // Staff/Admin Regenerate Google Meet API Link
@@ -1404,7 +1550,17 @@ app.put('/api/meetings/:id/status', authenticateToken, async (req, res) => {
   if (!meeting) return res.status(404).json({ error: '미팅 내역을 찾을 수 없습니다.' });
 
   const { status, start_time } = req.body;
-  if (status) meeting.status = status;
+  if (status) {
+    let actionName = '상태 변경';
+    if (status === 'COMPLETED') actionName = '상담 완료 처리';
+    addMeetingHistory(meeting, {
+      actor_role: req.user.role,
+      actor_nickname: req.user.nickname,
+      action: actionName,
+      status,
+      note: `${req.user.role}에 의해 상태가 '${status}'(으)로 변경됨`
+    });
+  }
   if (start_time) {
     meeting.start_time = start_time;
     // Auto sync with Google Meet API if rescheduled
@@ -1420,6 +1576,14 @@ app.put('/api/meetings/:id/status', authenticateToken, async (req, res) => {
     });
     meeting.meet_link = meetResult.meetLink;
     meeting.google_meet_api_synced = meetResult.synced;
+
+    addMeetingHistory(meeting, {
+      actor_role: req.user.role,
+      actor_nickname: req.user.nickname,
+      action: '미팅 일정 변경',
+      status: meeting.status,
+      note: `상담 일시가 ${start_time} (으)로 재지정됨`
+    });
   }
 
   res.json({ success: true, meeting });
