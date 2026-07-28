@@ -132,6 +132,21 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [
+        {
+          request_id: 'req-101',
+          request_type: 'REGISTRATION',
+          request_time: new Date(Date.now() - 86400000 * 2).toISOString(),
+          requester_id: 'u-staff-1',
+          requester_name: '김보조원',
+          status: 'APPROVED',
+          decision_time: new Date(Date.now() - 86400000).toISOString(),
+          decider_id: 'u-owner-1',
+          decider_name: '박대표',
+          rejection_reason: ''
+        }
+      ],
       created_at: new Date().toISOString()
     },
     {
@@ -150,6 +165,21 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [
+        {
+          request_id: 'req-102',
+          request_type: 'REGISTRATION',
+          request_time: new Date(Date.now() - 86400000 * 3).toISOString(),
+          requester_id: 'u-staff-1',
+          requester_name: '김보조원',
+          status: 'APPROVED',
+          decision_time: new Date(Date.now() - 86400000 * 2).toISOString(),
+          decider_id: 'u-owner-1',
+          decider_name: '박대표',
+          rejection_reason: ''
+        }
+      ],
       created_at: new Date().toISOString()
     },
     {
@@ -168,6 +198,21 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [
+        {
+          request_id: 'req-103',
+          request_type: 'REGISTRATION',
+          request_time: new Date(Date.now() - 86400000 * 4).toISOString(),
+          requester_id: 'u-staff-1',
+          requester_name: '김보조원',
+          status: 'APPROVED',
+          decision_time: new Date(Date.now() - 86400000 * 3).toISOString(),
+          decider_id: 'u-owner-1',
+          decider_name: '박대표',
+          rejection_reason: ''
+        }
+      ],
       created_at: new Date().toISOString()
     },
     {
@@ -186,6 +231,8 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [],
       created_at: new Date().toISOString()
     },
     {
@@ -204,6 +251,8 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [],
       created_at: new Date().toISOString()
     },
     {
@@ -222,6 +271,8 @@ const inMemoryDB = {
       doc_ledger_pdf_url: '/sample-ledger.pdf',
       doc_cadastral_pdf_url: '/sample-cadastral.pdf',
       listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [],
       created_at: new Date().toISOString()
     }
   ],
@@ -1061,13 +1112,35 @@ app.get('/api/listings/:id/land-use-review', authenticateToken, (req, res) => {
   });
 });
 
+// Helper function to append listing approval history
+function addListingApprovalRequest(listing, { request_type, requester_id, requester_name, pending_data = null, status = 'PENDING', decider_id = null, decider_name = null, rejection_reason = '' }) {
+  if (!listing.approval_requests) {
+    listing.approval_requests = [];
+  }
+  const reqObj = {
+    request_id: `req-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    request_type, // REGISTRATION, EDIT, DELETE, ADMIN_ASSIGN_CHANGE, ADMIN_DELETE
+    request_time: new Date().toISOString(),
+    requester_id,
+    requester_name: requester_name || '담당보조원',
+    status, // PENDING, APPROVED, REJECTED
+    decision_time: status !== 'PENDING' ? new Date().toISOString() : null,
+    decider_id,
+    decider_name,
+    rejection_reason: rejection_reason || '',
+    pending_data
+  };
+  listing.approval_requests.unshift(reqObj);
+  return reqObj;
+}
+
 // Register New Land Listing (Staff or Admin)
 app.post('/api/listings', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
     return res.status(403).json({ error: '중개보조원(Staff) 또는 관리자만 매물을 등록할 수 있습니다.' });
   }
 
-  const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url, public_land_data } = req.body;
+  const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url } = req.body;
 
   // Requirement 4 Validation: Prohibit restricted zones (군사보호지역/농업진흥구역/개발제한구역)
   const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
@@ -1092,12 +1165,202 @@ app.post('/api/listings', authenticateToken, (req, res) => {
     doc_luris_pdf_url: doc_luris_pdf_url || '/sample-luris.pdf',
     doc_ledger_pdf_url: doc_ledger_pdf_url || '/sample-ledger.pdf',
     doc_cadastral_pdf_url: doc_cadastral_pdf_url || '/sample-cadastral.pdf',
-    listing_status: 'ACTIVE',
+    listing_status: req.user.role === 'ADMIN' ? 'ACTIVE' : 'PENDING',
+    approval_status: req.user.role === 'ADMIN' ? 'APPROVED' : 'PENDING_REGISTRATION',
+    approval_requests: [],
     created_at: new Date().toISOString()
   };
 
+  addListingApprovalRequest(newListing, {
+    request_type: 'REGISTRATION',
+    requester_id: req.user.id,
+    requester_name: req.user.nickname,
+    status: req.user.role === 'ADMIN' ? 'APPROVED' : 'PENDING',
+    decider_id: req.user.role === 'ADMIN' ? req.user.id : null,
+    decider_name: req.user.role === 'ADMIN' ? req.user.nickname : null
+  });
+
   inMemoryDB.listings.unshift(newListing);
-  res.json({ success: true, listing: newListing });
+  res.json({
+    success: true,
+    listing: newListing,
+    message: req.user.role === 'ADMIN' 
+      ? '관리자 권한으로 매물이 직권 즉시 승인 등록되었습니다.' 
+      : '토지 매물이 등록되었으며, 개업공인중개사(Owner)에게 등록승인요청이 전송되었습니다.'
+  });
+});
+
+// Staff submits Approval Request (REGISTRATION, EDIT, DELETE)
+app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => {
+  if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+  }
+
+  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
+  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+
+  const { request_type, pending_data } = req.body;
+
+  if (request_type === 'EDIT') {
+    listing.approval_status = 'PENDING_EDIT';
+    addListingApprovalRequest(listing, {
+      request_type: 'EDIT',
+      requester_id: req.user.id,
+      requester_name: req.user.nickname,
+      pending_data,
+      status: 'PENDING'
+    });
+    return res.json({ success: true, message: '수정승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+  } else if (request_type === 'DELETE') {
+    listing.approval_status = 'PENDING_DELETE';
+    addListingApprovalRequest(listing, {
+      request_type: 'DELETE',
+      requester_id: req.user.id,
+      requester_name: req.user.nickname,
+      status: 'PENDING'
+    });
+    return res.json({ success: true, message: '삭제승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+  } else if (request_type === 'REGISTRATION') {
+    listing.approval_status = 'PENDING_REGISTRATION';
+    addListingApprovalRequest(listing, {
+      request_type: 'REGISTRATION',
+      requester_id: req.user.id,
+      requester_name: req.user.nickname,
+      status: 'PENDING'
+    });
+    return res.json({ success: true, message: '등록승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+  }
+
+  res.status(400).json({ error: '올바른 승인요청 구분을 입력해주세요.' });
+});
+
+// Owner approves or rejects approval request (with Rejection Reason)
+app.post('/api/listings/:id/owner-approval-decision', authenticateToken, (req, res) => {
+  if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '개업공인중개사(Owner) 또는 관리자 권한이 필요합니다.' });
+  }
+
+  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
+  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+
+  const { decision, rejection_reason } = req.body;
+  if (!decision) return res.status(400).json({ error: '결정(APPROVE 또는 REJECT)을 지정해주세요.' });
+
+  if (!listing.approval_requests || listing.approval_requests.length === 0) {
+    addListingApprovalRequest(listing, {
+      request_type: 'REGISTRATION',
+      requester_id: listing.assistant_id,
+      requester_name: listing.assistant_nickname,
+      status: 'PENDING'
+    });
+  }
+
+  const pendingReq = listing.approval_requests.find(r => r.status === 'PENDING') || listing.approval_requests[0];
+
+  if (decision === 'APPROVE') {
+    pendingReq.status = 'APPROVED';
+    pendingReq.decision_time = new Date().toISOString();
+    pendingReq.decider_id = req.user.id;
+    pendingReq.decider_name = req.user.nickname;
+
+    listing.approval_status = 'APPROVED';
+
+    if (pendingReq.request_type === 'REGISTRATION') {
+      listing.listing_status = 'ACTIVE';
+    } else if (pendingReq.request_type === 'EDIT' && pendingReq.pending_data) {
+      const p = pendingReq.pending_data;
+      if (p.title) listing.title = p.title;
+      if (p.address) listing.address = p.address;
+      if (p.jimok_official) listing.jimok_official = p.jimok_official;
+      if (p.area_sqm) listing.area_sqm = Number(p.area_sqm);
+      if (p.price) listing.price = Number(p.price);
+      if (p.zoning_district) listing.zoning_district = p.zoning_district;
+      if (p.road_access) listing.road_access = p.road_access;
+      if (p.youtube_url) listing.youtube_url = p.youtube_url;
+      listing.listing_status = 'ACTIVE';
+    } else if (pendingReq.request_type === 'DELETE') {
+      listing.listing_status = 'DELETED';
+    }
+
+    return res.json({ success: true, message: '요청이 승인되었습니다.', listing });
+  } else if (decision === 'REJECT') {
+    if (!rejection_reason || !rejection_reason.trim()) {
+      return res.status(400).json({ error: '반려 시에는 반드시 반려 사유를 입력해야 합니다.' });
+    }
+
+    pendingReq.status = 'REJECTED';
+    pendingReq.decision_time = new Date().toISOString();
+    pendingReq.decider_id = req.user.id;
+    pendingReq.decider_name = req.user.nickname;
+    pendingReq.rejection_reason = rejection_reason.trim();
+
+    listing.approval_status = 'REJECTED';
+
+    return res.json({ success: true, message: '요청이 반려되었습니다. 작성하신 반려 사유가 Staff에게 전달됩니다.', listing });
+  }
+
+  res.status(400).json({ error: '올바른 결정을 선택해주세요.' });
+});
+
+// Admin changes assigned Staff for a listing with reason
+app.post('/api/listings/:id/admin-change-staff', authenticateToken, (req, res) => {
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
+  }
+
+  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
+  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+
+  const { new_staff_id, reason } = req.body;
+  if (!new_staff_id) return res.status(400).json({ error: '변경할 담당 Staff를 선택해주세요.' });
+  if (!reason || !reason.trim()) return res.status(400).json({ error: '담당 Staff 변경 사유를 입력해야 합니다.' });
+
+  const newStaff = inMemoryDB.users.find(u => u.user_id === new_staff_id);
+  if (!newStaff) return res.status(404).json({ error: '지정한 Staff 계정을 찾을 수 없습니다.' });
+
+  const oldStaffName = listing.assistant_nickname;
+  listing.assistant_id = newStaff.user_id;
+  listing.assistant_nickname = newStaff.nickname;
+
+  addListingApprovalRequest(listing, {
+    request_type: 'ADMIN_ASSIGN_CHANGE',
+    requester_id: req.user.id,
+    requester_name: req.user.nickname,
+    status: 'APPROVED',
+    decider_id: req.user.id,
+    decider_name: req.user.nickname,
+    rejection_reason: `[관리자 담당 Staff 변경] 기존 (${oldStaffName}) -> 변경 (${newStaff.nickname}). 변경사유: ${reason.trim()}`
+  });
+
+  res.json({ success: true, message: `담당 Staff가 ${newStaff.nickname}(으)로 성공적으로 변경되었습니다.`, listing });
+});
+
+// Admin deletes listing directly with reason
+app.post('/api/listings/:id/admin-delete', authenticateToken, (req, res) => {
+  if (req.user.role !== 'ADMIN') {
+    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
+  }
+
+  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
+  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+
+  const { reason } = req.body;
+  if (!reason || !reason.trim()) return res.status(400).json({ error: '삭제 사유를 입력해야 합니다.' });
+
+  listing.listing_status = 'DELETED';
+  listing.approval_status = 'REJECTED';
+
+  addListingApprovalRequest(listing, {
+    request_type: 'ADMIN_DELETE',
+    requester_id: req.user.id,
+    requester_name: req.user.nickname,
+    status: 'APPROVED',
+    decider_id: req.user.id,
+    decider_name: req.user.nickname,
+    rejection_reason: `[관리자 직권 삭제] 사유: ${reason.trim()}`
+  });
+
+  res.json({ success: true, message: '매물이 삭제 처리되었습니다. 삭제 사유가 Staff 및 Owner에게 공유됩니다.', listing });
 });
 
 // Edit Land Listing
@@ -1119,6 +1382,19 @@ app.put('/api/listings/:id', authenticateToken, (req, res) => {
     });
   }
 
+  if (req.user.role === 'STAFF') {
+    // Staff edit creates a PENDING_EDIT request
+    inMemoryDB.listings[idx].approval_status = 'PENDING_EDIT';
+    addListingApprovalRequest(inMemoryDB.listings[idx], {
+      request_type: 'EDIT',
+      requester_id: req.user.id,
+      requester_name: req.user.nickname,
+      pending_data: { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url },
+      status: 'PENDING'
+    });
+    return res.json({ success: true, message: '수정사항이 등록되었으며 대표자(Owner)에게 수정승인요청이 전달되었습니다.', listing: inMemoryDB.listings[idx] });
+  }
+
   inMemoryDB.listings[idx] = {
     ...inMemoryDB.listings[idx],
     title,
@@ -1128,7 +1404,8 @@ app.put('/api/listings/:id', authenticateToken, (req, res) => {
     price: Number(price),
     zoning_district,
     road_access,
-    youtube_url: youtube_url || inMemoryDB.listings[idx].youtube_url
+    youtube_url: youtube_url || inMemoryDB.listings[idx].youtube_url,
+    approval_status: 'APPROVED'
   };
 
   res.json({ success: true, listing: inMemoryDB.listings[idx] });
@@ -1139,8 +1416,23 @@ app.delete('/api/listings/:id', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN' && req.user.role !== 'OWNER') {
     return res.status(403).json({ error: '권한이 없습니다.' });
   }
-  inMemoryDB.listings = inMemoryDB.listings.filter(l => l.listing_id !== req.params.id);
-  res.json({ success: true });
+
+  const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
+  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+
+  if (req.user.role === 'STAFF') {
+    listing.approval_status = 'PENDING_DELETE';
+    addListingApprovalRequest(listing, {
+      request_type: 'DELETE',
+      requester_id: req.user.id,
+      requester_name: req.user.nickname,
+      status: 'PENDING'
+    });
+    return res.json({ success: true, message: '삭제승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+  }
+
+  listing.listing_status = 'DELETED';
+  res.json({ success: true, message: '매물이 삭제되었습니다.' });
 });
 
 // 4. Shopping Cart Endpoints
