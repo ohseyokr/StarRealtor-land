@@ -154,22 +154,20 @@ INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, busine
 VALUES ('cfg-1', '스타공인중개사사무소', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr')
 ON CONFLICT (config_id) DO NOTHING;
 
--- 2. Seed Users (Admin, Owner, Staff, Member)
--- Passwords hashed for 'admin123'
-INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) VALUES
-('u-admin-1', 'ohseyokr@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '최고관리자', '시스템관리자', '010-1111-2222', 'ADMIN'),
-('u-owner-1', 'owner@starrealtor-land.co.kr', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '대표중개사', '홍길동', '010-9876-5432', 'OWNER'),
-('u-staff-1', 'staff1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '김보조원', '김철수', '010-3333-4444', 'STAFF'),
-('u-member-1', 'member1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '토지투자왕', '이영희', '010-5555-6666', 'MEMBER')
-ON CONFLICT (user_id) DO NOTHING;
+-- 2. Seed Users (Disabled)
+-- INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) VALUES
+-- ('u-admin-1', 'ohseyokr@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '최고관리자', '시스템관리자', '010-1111-2222', 'ADMIN'),
+-- ('u-owner-1', 'owner@starrealtor-land.co.kr', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '대표중개사', '홍길동', '010-9876-5432', 'OWNER'),
+-- ('u-staff-1', 'staff1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '김보조원', '김철수', '010-3333-4444', 'STAFF'),
+-- ('u-member-1', 'member1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '토지투자왕', '이영희', '010-5555-6666', 'MEMBER')
+-- ON CONFLICT (user_id) DO NOTHING;
 
--- 3. Seed Land Listings
-INSERT INTO TB_LAND_LISTING (listing_id, assistant_id, title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url, listing_status) VALUES
-('lnd-101', 'u-staff-1', '강원도 평창군 대관령면 수하리 청정 임야 매물', '강원특별자치도 평창군 대관령면 수하리 산 45-2', '임', 3305, 350000000, '보전관리지역', '2차선 포장도로 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
-('lnd-102', 'u-staff-1', '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)', '충청남도 당진시 신평면 금천리 123-5', '전', 1652, 180000000, '계획관리지역', '4m 마을 농로 구거 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
-('lnd-103', 'u-staff-1', '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)', '경기도 용인시 처인구 양지면 양지리 78-1', '대', 660, 820000000, '제1종일반주거지역', '6m 지적도상 도로 완비', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
-('lnd-104', 'u-staff-1', '(임야) 경기도 포천시 창수면 가양리 369-6', '경기도 포천시 창수면 가양리 369-6', '임', 4958, 290000000, '계획관리지역', '4m 포장도로 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
-('lnd-105', 'u-staff-1', '(대지) 경기도 양주시 고암동 603-7', '경기도 양주시 고암동 603-7', '대', 495, 650000000, '제1종일반주거지역', '6m 진입도로 완비', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
-('lnd-106', 'u-staff-1', '(공장용지) 경기도 포천시 내촌면 마명리 337', '경기도 포천시 내촌면 마명리 337', '장', 2314, 1250000000, '계획관리지역', '8m 대로변 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE')
-ON CONFLICT (listing_id) DO NOTHING;
-
+-- 3. Seed Land Listings (Disabled)
+-- INSERT INTO TB_LAND_LISTING (listing_id, assistant_id, title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url, listing_status) VALUES
+-- ('lnd-101', 'u-staff-1', '강원도 평창군 대관령면 수하리 청정 임야 매물', '강원특별자치도 평창군 대관령면 수하리 산 45-2', '임', 3305, 350000000, '보전관리지역', '2차선 포장도로 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
+-- ('lnd-102', 'u-staff-1', '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)', '충청남도 당진시 신평면 금천리 123-5', '전', 1652, 180000000, '계획관리지역', '4m 마을 농로 구거 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
+-- ('lnd-103', 'u-staff-1', '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)', '경기도 용인시 처인구 양지면 양지리 78-1', '대', 660, 820000000, '제1종일반주거지역', '6m 지적도상 도로 완비', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
+-- ('lnd-104', 'u-staff-1', '(임야) 경기도 포천시 창수면 가양리 369-6', '경기도 포천시 창수면 가양리 369-6', '임', 4958, 290000000, '계획관리지역', '4m 포장도로 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
+-- ('lnd-105', 'u-staff-1', '(대지) 경기도 양주시 고암동 603-7', '경기도 양주시 고암동 603-7', '대', 495, 650000000, '제1종일반주거지역', '6m 진입도로 완비', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
+-- ('lnd-106', 'u-staff-1', '(공장용지) 경기도 포천시 내촌면 마명리 337', '경기도 포천시 내촌면 마명리 337', '장', 2314, 1250000000, '계획관리지역', '8m 대로변 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE')
+-- ON CONFLICT (listing_id) DO NOTHING;
