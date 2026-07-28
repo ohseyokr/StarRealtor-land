@@ -172,3 +172,4 @@ INSERT INTO TB_LAND_LISTING (listing_id, assistant_id, title, address, jimok_off
 ('lnd-105', 'u-staff-1', '(대지) 경기도 양주시 고암동 603-7', '경기도 양주시 고암동 603-7', '대', 495, 650000000, '제1종일반주거지역', '6m 진입도로 완비', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE'),
 ('lnd-106', 'u-staff-1', '(공장용지) 경기도 포천시 내촌면 마명리 337', '경기도 포천시 내촌면 마명리 337', '장', 2314, 1250000000, '계획관리지역', '8m 대로변 접함', 'https://www.youtube.com/embed/dQw4w9WgXcQ', '/sample-luris.pdf', '/sample-ledger.pdf', '/sample-cadastral.pdf', 'ACTIVE')
 ON CONFLICT (listing_id) DO NOTHING;
+
