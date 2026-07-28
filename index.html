@@ -1698,90 +1698,288 @@
             return meetLink;
         }
 
+        function getStatusBadge(status) {
+            switch (status) {
+                case 'CONFIRMED':
+                    return `<span class="bg-blue-100 text-blue-900 border border-blue-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">CONFIRMED (예약확정)</span>`;
+                case 'CANCEL_REQUESTED':
+                    return `<span class="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">CANCEL_REQUESTED (취소요청됨)</span>`;
+                case 'REFUND_APPROVAL_REQUESTED':
+                    return `<span class="bg-purple-100 text-purple-900 border border-purple-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">REFUND_APPROVAL_REQUESTED (Staff 취소승인환불요청)</span>`;
+                case 'CANCEL_APPROVED_REFUND_PENDING':
+                    return `<span class="bg-indigo-100 text-indigo-900 border border-indigo-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">CANCEL_APPROVED (Owner 승인-환불대기)</span>`;
+                case 'CANCEL_REJECTED':
+                    return `<span class="bg-rose-100 text-rose-900 border border-rose-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">CANCEL_REJECTED (Owner 취소반려)</span>`;
+                case 'REFUNDED':
+                case 'CANCELLED_REFUNDED':
+                    return `<span class="bg-emerald-100 text-emerald-900 border border-emerald-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">REFUNDED (PG 환불완료)</span>`;
+                case 'COMPLETED':
+                    return `<span class="bg-gray-100 text-gray-800 border border-gray-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">COMPLETED (상담완료)</span>`;
+                default:
+                    return `<span class="bg-gray-100 text-gray-700 border border-gray-300 px-2 py-0.5 font-bold text-[10px] rounded uppercase">${status || ''}</span>`;
+            }
+        }
+
+        function renderHistoryTimeline(history) {
+            if (!history || !Array.isArray(history) || history.length === 0) {
+                return `<p class="text-[10px] text-black/40 italic py-1">기록된 이벤트 히스토리가 없습니다.</p>`;
+            }
+            let html = `
+                <div class="mt-2.5 pt-2 border-t border-black/10 text-[11px] space-y-1.5 bg-white/80 p-2.5 rounded border border-black/5">
+                    <div class="font-bold text-[#3A5A40] flex items-center gap-1.5 text-[11px]">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Google Meet 이벤트 시간 정보 & 히스토리 기록
+                    </div>
+                    <div class="space-y-1">
+            `;
+            history.forEach(item => {
+                const timeStr = item.timestamp ? new Date(item.timestamp).toLocaleString('ko-KR') : '';
+                let badgeColor = 'bg-gray-100 text-gray-700 border-gray-300';
+                if (item.status === 'CONFIRMED') badgeColor = 'bg-blue-50 text-blue-700 border-blue-200';
+                if (item.status === 'CANCEL_REQUESTED') badgeColor = 'bg-amber-50 text-amber-800 border-amber-200';
+                if (item.status === 'REFUND_APPROVAL_REQUESTED') badgeColor = 'bg-purple-50 text-purple-800 border-purple-200';
+                if (item.status === 'CANCEL_APPROVED_REFUND_PENDING') badgeColor = 'bg-indigo-50 text-indigo-800 border-indigo-200';
+                if (item.status === 'CANCEL_REJECTED') badgeColor = 'bg-rose-50 text-rose-800 border-rose-200';
+                if (item.status === 'REFUNDED') badgeColor = 'bg-emerald-50 text-emerald-800 border-emerald-200';
+                if (item.status === 'COMPLETED') badgeColor = 'bg-gray-100 text-gray-800 border-gray-300';
+
+                html += `
+                    <div class="flex items-start gap-2 text-[10px] border-b border-black/5 pb-1 last:border-b-0">
+                        <span class="text-black/50 font-mono whitespace-nowrap pt-0.5">${timeStr}</span>
+                        <span class="px-1.5 py-0.2 border text-[9px] font-bold rounded ${badgeColor} whitespace-nowrap">[${item.actor_role || ''}] ${item.action || ''}</span>
+                        <span class="text-black/80 font-medium">${item.note || ''}</span>
+                    </div>
+                `;
+            });
+            html += `
+                    </div>
+                </div>
+            `;
+            return html;
+        }
+
+        // Workflow Action Handlers
+        async function requestMemberCancelMeeting(meetingId) {
+            if (!confirm('해당 Google Meet 화상 상담 건에 대해 취소요청을 접수하시겠습니까?\n접수 후 담당 중개보조원(Staff) 및 대표자(Owner) 승인을 거쳐 환불이 진행됩니다.')) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/cancel-request`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '취소 요청 처리 실패');
+                alert(data.message || '취소 요청이 접수되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
+        async function staffForwardRefundToOwner(meetingId) {
+            if (!confirm('회원의 취소 요청 건에 대해 개업공인중개사(Owner)에게 \'취소승인환불요청\'을 전송하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/staff-request-refund`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '환불요청 전송 실패');
+                alert(data.message || '대표자(Owner)에게 취소 승인 환불 요청이 전송되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
+        async function staffRejectCancelRequest(meetingId) {
+            if (!confirm('회원의 취소 요청에 대해 \'취소요청거절\' 처리를 진행하시겠습니까?\n거절 시 Google Meet 화상 상담 일정이 정상 유효하게 유지됩니다.')) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/staff-reject-cancel`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '취소요청 거절 처리 실패');
+                alert(data.message || '회원의 취소 요청이 거절 처리되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
+        async function ownerDecisionMeeting(meetingId, decision) {
+            const label = decision === 'APPROVE' ? '취소승인(환불진행)' : '취소반려(환불불가)';
+            if (!confirm(`해당 Google Meet 연결 건에 대해 '${label}' 결정을 진행하시겠습니까?`)) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/owner-decision`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ decision })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '결정 처리 실패');
+                alert(data.message || `${label} 처리가 완료되었습니다.`);
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
+        async function adminExecutePgRefund(meetingId) {
+            if (!confirm('연동된 PG사 결제 취소 및 환불 처리를 실행하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/meetings/${meetingId}/admin-execute-refund`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'PG 환불 실행 실패');
+                alert(data.message || 'PG 결제 취소 환불이 성공적으로 실행되었습니다.');
+                showDashboardView();
+            } catch (err) {
+                alert(`[오류] ${err.message}`);
+            }
+        }
+
         // Member Dashboard
         async function renderMemberDashboard(container) {
             const res = await fetch('/api/meetings/member', {
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
-            const meetings = await res.json();
+            const data = await res.json();
+            const meetings = data.meetings || [];
+            const selectedListings = data.selected_listings || [];
 
-            let meetingsHtml = '';
-            if (meetings.length === 0) {
-                meetingsHtml = `<p class="text-xs text-black/40 py-4">확정된 Google Meet 회의 일정이 없습니다.</p>`;
+            let listingsHtml = '';
+            if (selectedListings.length === 0) {
+                listingsHtml = `<p class="text-xs text-black/40 py-3">선택/관심 등록된 토지 매물 내역이 없습니다. (메인 매물 리스트에서 장바구니/미팅신청 가능)</p>`;
             } else {
-                meetings.forEach(m => {
-                    const isSynced = m.google_meet_api_synced;
-                    const validMeetLink = getValidMeetUrl(m.meet_link, isSynced);
-                    meetingsHtml += `
-                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px] uppercase">${m.status}</span>
-                                        ${isSynced ? `
-                                            <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 border border-blue-200 text-[10px] flex items-center gap-1">
-                                                <i class="fa-solid fa-cloud-check text-blue-600"></i> Google Calendar/Meet API 연동됨
-                                            </span>
-                                        ` : `
-                                            <span class="bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 border border-emerald-200 text-[10px] flex items-center gap-1">
-                                                <i class="fa-solid fa-video text-emerald-600"></i> Google Meet 화상 회의 준비
-                                            </span>
-                                        `}
-                                    </div>
-                                    <h4 class="font-serif italic text-base text-[#1A1A1A] mt-1">${m.listing_title}</h4>
-                                    <p class="text-black/60 text-[11px] mt-0.5">상담 일시: ${m.start_time.replace('T', ' ')}</p>
-                                    <p class="text-[#3A5A40] text-[11px]">담당 중개보조원: ${m.assistant_nickname} (${m.assistant_phone})</p>
-                                </div>
-                                <div class="flex flex-col items-end space-y-1">
-                                    <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition shadow-sm">
-                                        <i class="fa-solid fa-video"></i> Google Meet 입장
-                                    </a>
-                                    ${m.status !== 'CANCELLED_REFUNDED' ? `
-                                        <button onclick="cancelMeetingRefund('${m.meeting_id}')" class="text-rose-700 hover:underline text-[11px] pt-1">
-                                            결제 취소 / 환불 신청
-                                        </button>
-                                    ` : '<span class="text-rose-700 font-bold text-[11px]">환불 처리됨</span>'}
-                                </div>
+                selectedListings.forEach(l => {
+                    listingsHtml += `
+                        <div class="p-3 bg-[#F5F2ED] border border-black/10 flex justify-between items-center text-xs">
+                            <div>
+                                <span class="font-bold text-[#1A1A1A]">${l.title}</span>
+                                <p class="text-[11px] text-black/60">${l.address || ''} | ${l.land_area_sqm || ''}㎡ (${l.land_area_pyeong || ''}평)</p>
+                            </div>
+                            <div class="text-right">
+                                <span class="font-bold text-[#3A5A40] text-sm">${l.price_display || ''}</span>
                             </div>
                         </div>
                     `;
                 });
             }
 
+            let meetingsHtml = '';
+            if (meetings.length === 0) {
+                meetingsHtml = `<p class="text-xs text-black/40 py-4">신청/확정된 Google Meet 회의 일정이 없습니다.</p>`;
+            } else {
+                meetings.forEach(m => {
+                    const isSynced = m.google_meet_api_synced;
+                    const validMeetLink = getValidMeetUrl(m.meet_link, isSynced);
+                    const timelineHtml = renderHistoryTimeline(m.history);
+                    const statusBadge = getStatusBadge(m.status);
+
+                    let actionArea = '';
+                    if (m.status === 'CONFIRMED' || m.status === 'CANCEL_REJECTED') {
+                        actionArea = `
+                            <button onclick="requestMemberCancelMeeting('${m.meeting_id}')" class="bg-rose-100 hover:bg-rose-200 text-rose-800 border border-rose-300 font-bold px-3 py-1 text-[11px] rounded transition flex items-center gap-1 shadow-sm">
+                                <i class="fa-solid fa-ban"></i> Google Meet 취소요청
+                            </button>
+                        `;
+                    } else if (m.status === 'CANCEL_REQUESTED') {
+                        actionArea = `<span class="text-amber-800 bg-amber-50 px-2.5 py-1 font-bold border border-amber-200 text-[11px] rounded">취소요청 접수됨 (Staff/Owner 검토중)</span>`;
+                    } else if (m.status === 'REFUND_APPROVAL_REQUESTED') {
+                        actionArea = `<span class="text-purple-800 bg-purple-50 px-2.5 py-1 font-bold border border-purple-200 text-[11px] rounded">Staff 취소승인 환불요청 전달됨 (Owner 검토중)</span>`;
+                    } else if (m.status === 'CANCEL_APPROVED_REFUND_PENDING') {
+                        actionArea = `<span class="text-indigo-800 bg-indigo-50 px-2.5 py-1 font-bold border border-indigo-200 text-[11px] rounded">Owner 취소승인 완료 (Admin PG 환불 처리 대기중)</span>`;
+                    } else if (m.status === 'REFUNDED' || m.status === 'CANCELLED_REFUNDED') {
+                        actionArea = `<span class="text-emerald-800 bg-emerald-50 px-2.5 py-1 font-bold border border-emerald-200 text-[11px] rounded">PG 결제 취소 및 환불 완료됨</span>`;
+                    } else if (m.status === 'COMPLETED') {
+                        actionArea = `<span class="text-gray-800 bg-gray-100 px-2.5 py-1 font-bold border border-gray-300 text-[11px] rounded">화상 상담 완료됨</span>`;
+                    }
+
+                    meetingsHtml += `
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs rounded-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${statusBadge}
+                                        ${isSynced ? `
+                                            <span class="bg-blue-50 text-blue-700 font-bold px-2 py-0.5 border border-blue-200 text-[10px] flex items-center gap-1">
+                                                <i class="fa-solid fa-cloud-check text-blue-600"></i> Google Meet API 연동
+                                            </span>
+                                        ` : ''}
+                                    </div>
+                                    <h4 class="font-serif italic text-base text-[#1A1A1A] font-bold mt-1">${m.listing_title}</h4>
+                                    <p class="text-black/70 text-[11px] mt-0.5">상담 지정 일시: <strong>${m.start_time ? m.start_time.replace('T', ' ') : ''}</strong></p>
+                                    <p class="text-[#3A5A40] text-[11px]">담당 중개보조원: <strong>${m.assistant_nickname || ''}</strong> (${m.assistant_phone || ''})</p>
+                                </div>
+                                <div class="flex flex-col items-end space-y-1.5">
+                                    <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition shadow-sm rounded-sm">
+                                        <i class="fa-solid fa-video"></i> Google Meet 입장
+                                    </a>
+                                    ${actionArea}
+                                </div>
+                            </div>
+                            ${timelineHtml}
+                        </div>
+                    `;
+                });
+            }
+
             container.innerHTML = `
-                <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                    <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
-                        <i class="fa-solid fa-calendar-check text-[#3A5A40]"></i> 확정 및 완료된 Google Meet 회의 일정
-                    </h3>
-                    <div class="space-y-3">
-                        ${meetingsHtml}
+                <div class="space-y-6">
+                    <!-- Section 1: Selected Land Listings -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                            <i class="fa-solid fa-layer-group text-[#3A5A40]"></i> 내가 선택/관심 등록한 토지매물 정보 내역
+                        </h3>
+                        <div class="space-y-2">
+                            ${listingsHtml}
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Meetings & History Timeline -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-check text-[#3A5A40]"></i> Google Meet 화상 상담 미팅연결 일정 및 이벤트 내역
+                        </h3>
+                        <div class="space-y-3">
+                            ${meetingsHtml}
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        async function cancelMeetingRefund(meetingId) {
-            if (!confirm('정말로 Google Meet 상담 결제를 취소하고 환불을 진행하시겠습니까?')) return;
-            try {
-                const res = await fetch(`/api/meetings/${meetingId}/cancel`, {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
-                });
-                const data = await res.json();
-                alert(data.message || '환불 처리되었습니다.');
-                showDashboardView();
-            } catch (err) {
-                alert('환불 처리에 실패했습니다.');
-            }
-        }
-
         // Staff Dashboard
         // Privacy Isolation: Staff can ONLY see Member ID & Nickname!
         async function renderStaffDashboard(container) {
-            const resMeets = await fetch('/api/meetings/staff', {
+            const res = await fetch('/api/meetings/staff', {
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
-            const meetings = await resMeets.json();
+            const data = await res.json();
+            const meetings = data.meetings || [];
+            const staffListings = data.listings || [];
+
+            let listingsHtml = '';
+            if (staffListings.length === 0) {
+                listingsHtml = `<p class="text-xs text-black/40 py-3">내가 등록/배정한 토지매물이 없습니다.</p>`;
+            } else {
+                staffListings.forEach(l => {
+                    listingsHtml += `
+                        <div class="p-3 bg-[#F5F2ED] border border-black/10 flex justify-between items-center text-xs">
+                            <div>
+                                <span class="font-bold text-[#1A1A1A]">${l.title}</span>
+                                <p class="text-[11px] text-black/60">${l.address || ''} | ${l.price_display || ''}</p>
+                            </div>
+                            <span class="text-[10px] bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30">${l.listing_status || 'ACTIVE'}</span>
+                        </div>
+                    `;
+                });
+            }
 
             let meetsHtml = '';
             if (meetings.length === 0) {
@@ -1789,20 +1987,40 @@
             } else {
                 meetings.forEach(m => {
                     const validMeetLink = getValidMeetUrl(m.meet_link, m.google_meet_api_synced);
+                    const timelineHtml = renderHistoryTimeline(m.history);
+                    const statusBadge = getStatusBadge(m.status);
+
+                    let staffAction = '';
+                    if (m.status === 'CANCEL_REQUESTED') {
+                        staffAction = `
+                            <div class="flex items-center gap-1.5 bg-amber-50 p-2 border border-amber-200 rounded my-1">
+                                <span class="text-amber-900 font-bold text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-bell text-amber-700"></i> 취소요청 처리:
+                                </span>
+                                <button onclick="staffForwardRefundToOwner('${m.meeting_id}')" class="bg-purple-700 hover:bg-purple-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-sm transition flex items-center gap-1">
+                                    <i class="fa-solid fa-paper-plane"></i> 취소승인환불요청 (Owner 전송)
+                                </button>
+                                <button onclick="staffRejectCancelRequest('${m.meeting_id}')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-sm transition flex items-center gap-1">
+                                    <i class="fa-solid fa-xmark"></i> 취소요청거절
+                                </button>
+                            </div>
+                        `;
+                    }
+
                     meetsHtml += `
-                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs rounded-sm">
                             <div class="flex justify-between items-center">
                                 <span class="font-serif italic text-sm text-[#1A1A1A] font-bold">${m.listing_title}</span>
                                 <div class="flex items-center gap-2">
+                                    ${statusBadge}
                                     <select onchange="updateStaffMeetingStatus('${m.meeting_id}', this.value)" class="bg-white border border-black/20 text-[#3A5A40] font-bold text-[11px] p-1 rounded focus:outline-none focus:border-[#3A5A40]">
                                         <option value="CONFIRMED" ${m.status === 'CONFIRMED' ? 'selected' : ''}>CONFIRMED (예약확정)</option>
                                         <option value="COMPLETED" ${m.status === 'COMPLETED' ? 'selected' : ''}>COMPLETED (상담완료)</option>
-                                        <option value="CANCELLED_REFUNDED" ${m.status === 'CANCELLED_REFUNDED' ? 'selected' : ''}>CANCELLED (취소됨)</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="text-[11px] text-black/70 flex justify-between items-center">
-                                <span>상담일시: <strong>${m.start_time.replace('T', ' ')}</strong></span>
+                                <span>상담 지정 일시: <strong>${m.start_time ? m.start_time.replace('T', ' ') : ''}</strong></span>
                                 <span class="text-[10px] text-blue-800 bg-blue-50 border border-blue-200 px-1.5 py-0.5">
                                     Google Meet 연동 상태: ${m.google_meet_api_synced ? 'API 동기화 완료' : 'Meet 링크 준비됨'}
                                 </span>
@@ -1812,13 +2030,17 @@
                                 <span class="text-rose-700 text-[10px]">* 고객 개인정보 보호 규정으로 실명/연락처 마스킹됨</span>
                             </div>
                             <div class="pt-1 flex justify-between items-center border-t border-black/10">
-                                <button onclick="regenerateStaffGoogleMeet('${m.meeting_id}')" class="text-[#3A5A40] hover:underline font-bold text-[11px] flex items-center gap-1">
-                                    <i class="fa-solid fa-arrows-rotate"></i> Google Meet API 일정/링크 갱신
-                                </button>
-                                <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-3 py-1.5 text-[11px] font-bold uppercase transition flex items-center gap-1">
+                                <div class="flex items-center gap-2">
+                                    <button onclick="regenerateStaffGoogleMeet('${m.meeting_id}')" class="text-[#3A5A40] hover:underline font-bold text-[11px] flex items-center gap-1">
+                                        <i class="fa-solid fa-arrows-rotate"></i> Google Meet API 갱신
+                                    </button>
+                                    ${staffAction}
+                                </div>
+                                <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-3 py-1.5 text-[11px] font-bold uppercase transition flex items-center gap-1 shadow-sm">
                                     <i class="fa-solid fa-video"></i> Meet 주재하기
                                 </a>
                             </div>
+                            ${timelineHtml}
                         </div>
                     `;
                 });
@@ -1826,31 +2048,42 @@
 
             container.innerHTML = `
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <!-- Staff Personal Profile Form -->
-                    <div class="lg:col-span-5 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                            <i class="fa-solid fa-id-badge text-[#3A5A40]"></i> 중개보조원 개인정보 입력/수정
-                        </h3>
-                        <form onsubmit="handleUpdateStaffProfile(event)" class="space-y-3 text-xs">
-                            <div>
-                                <label class="block text-black/60 mb-1">별명</label>
-                                <input type="text" id="staff-edit-nickname" value="${currentUser.nickname}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                    <!-- Staff Profile & Registered Listings -->
+                    <div class="lg:col-span-5 space-y-6">
+                        <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-id-badge text-[#3A5A40]"></i> 중개보조원 개인정보 수정
+                            </h3>
+                            <form onsubmit="handleUpdateStaffProfile(event)" class="space-y-3 text-xs">
+                                <div>
+                                    <label class="block text-black/60 mb-1">별명</label>
+                                    <input type="text" id="staff-edit-nickname" value="${currentUser.nickname}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <div>
+                                    <label class="block text-black/60 mb-1">전화번호</label>
+                                    <input type="text" id="staff-edit-phone" value="010-3333-4444" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                </div>
+                                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition">
+                                    프로필 수정 저장
+                                </button>
+                            </form>
+                        </div>
+
+                        <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 내가 등록한 토지매물 정보 내역
+                            </h3>
+                            <div class="space-y-2">
+                                ${listingsHtml}
                             </div>
-                            <div>
-                                <label class="block text-black/60 mb-1">전화번호</label>
-                                <input type="text" id="staff-edit-phone" value="010-3333-4444" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                            </div>
-                            <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition">
-                                프로필 수정 저장
-                            </button>
-                        </form>
+                        </div>
                     </div>
 
                     <!-- Staff Meetings List -->
                     <div class="lg:col-span-7 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                         <div class="flex justify-between items-center">
                             <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> 미팅 예정 및 완료 내역
+                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> Google Meet 연결 내역 & 이벤트 시간 정보
                             </h3>
                             <button onclick="openModal('add-listing-modal')" class="bg-[#3A5A40] text-white text-[11px] font-bold px-3 py-1 uppercase">
                                 + 매물 수집 등록
@@ -1930,9 +2163,73 @@
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
             const data = await res.json();
+            const members = data.members || [];
+            const listings = data.listings || [];
+            const meetings = data.meetings || [];
+
+            let staffListingsRows = '';
+            listings.forEach(l => {
+                staffListingsRows += `
+                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
+                        <td class="p-2.5 font-mono text-[11px]">${l.listing_id}</td>
+                        <td class="p-2.5 font-bold">${l.title}</td>
+                        <td class="p-2.5 text-black/70">${l.address || ''}</td>
+                        <td class="p-2.5 text-[#3A5A40] font-bold">${l.price_display || ''}</td>
+                        <td class="p-2.5 font-medium">${l.assistant_nickname || ''} (${l.assistant_phone || ''})</td>
+                        <td class="p-2.5"><span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px]">${l.listing_status || 'ACTIVE'}</span></td>
+                    </tr>
+                `;
+            });
+
+            let meetsHtml = '';
+            if (meetings.length === 0) {
+                meetsHtml = `<p class="text-xs text-black/40 py-4">플랫폼 내 Google Meet 미팅 내역이 없습니다.</p>`;
+            } else {
+                meetings.forEach(m => {
+                    const timelineHtml = renderHistoryTimeline(m.history);
+                    const statusBadge = getStatusBadge(m.status);
+
+                    let ownerDecisionAction = '';
+                    if (m.status === 'REFUND_APPROVAL_REQUESTED') {
+                        ownerDecisionAction = `
+                            <div class="flex items-center gap-2 pt-2 border-t border-purple-200 bg-purple-50 p-2.5 rounded">
+                                <span class="text-purple-900 font-bold text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-bell text-purple-700"></i> Staff 취소승인환불요청 수신건:
+                                </span>
+                                <button onclick="ownerDecisionMeeting('${m.meeting_id}', 'APPROVE')" class="bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-3 py-1 text-[11px] rounded shadow-sm transition">
+                                    <i class="fa-solid fa-check"></i> 취소승인(환불진행)
+                                </button>
+                                <button onclick="ownerDecisionMeeting('${m.meeting_id}', 'REJECT')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-3 py-1 text-[11px] rounded shadow-sm transition">
+                                    <i class="fa-solid fa-xmark"></i> 취소반려(환불불가)
+                                </button>
+                            </div>
+                        `;
+                    }
+
+                    meetsHtml += `
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs rounded-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${statusBadge}
+                                    </div>
+                                    <h4 class="font-serif italic text-base text-[#1A1A1A] font-bold mt-1">${m.listing_title}</h4>
+                                    <p class="text-black/70 text-[11px] mt-0.5">상담 지정 일시: <strong>${m.start_time ? m.start_time.replace('T', ' ') : ''}</strong></p>
+                                </div>
+                                <div class="text-right text-[11px] space-y-0.5">
+                                    <p class="text-[#3A5A40] font-bold">담당 보조원: ${m.assistant_nickname || ''} (${m.assistant_phone || ''})</p>
+                                    <p class="text-black/80 font-medium">신청 회원: ${m.member_nickname || ''} (${m.member_email || ''} / ${m.member_phone || ''})</p>
+                                </div>
+                            </div>
+                            ${ownerDecisionAction}
+                            ${timelineHtml}
+                        </div>
+                    `;
+                });
+            }
 
             let membersRows = '';
-            data.members.forEach(m => {
+            members.forEach(m => {
                 membersRows += `
                     <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
                         <td class="p-2.5 font-mono">${m.user_id}</td>
@@ -1945,31 +2242,72 @@
             });
 
             container.innerHTML = `
-                <div class="bg-white p-6 border border-black/10 space-y-6 shadow-sm">
-                    <div class="flex justify-between items-center border-b border-black/10 pb-3">
-                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
-                            <i class="fa-solid fa-users text-[#3A5A40]"></i> 전체 회원 개인정보 종합 관리 (Owner 총괄)
-                        </h3>
-                        <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 border border-[#3A5A40]/30 font-medium">
-                            모든 회원의 실명, 이메일, 전화번호 접근 열람 허용
-                        </span>
+                <div class="space-y-6">
+                    <!-- Section 1: Staff Registered Land Listings -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> Staff 중개보조원이 등록한 토지매물 정보 내역
+                            </h3>
+                            <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 border border-[#3A5A40]/30 font-medium">
+                                전체 등록 토지 매물 리스트
+                            </span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
+                                    <tr>
+                                        <th class="p-2.5">매물 ID</th>
+                                        <th class="p-2.5">매물명</th>
+                                        <th class="p-2.5">소재지</th>
+                                        <th class="p-2.5">희망 매매가</th>
+                                        <th class="p-2.5">담당 보조원</th>
+                                        <th class="p-2.5">상태</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${staffListingsRows}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
 
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left border-collapse">
-                            <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
-                                <tr>
-                                    <th class="p-2.5">회원 ID</th>
-                                    <th class="p-2.5">실명</th>
-                                    <th class="p-2.5">이메일 계정</th>
-                                    <th class="p-2.5">별명</th>
-                                    <th class="p-2.5">연락처</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${membersRows}
-                            </tbody>
-                        </table>
+                    <!-- Section 2: Google Meet Consultation History & Decisions -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                            <i class="fa-solid fa-headset text-[#3A5A40]"></i> Member와 Staff간의 Google Meet 연결 내역 & 이벤트 시간 정보
+                        </h3>
+                        <div class="space-y-3">
+                            ${meetsHtml}
+                        </div>
+                    </div>
+
+                    <!-- Section 3: All Members Privacy Full Access -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                                <i class="fa-solid fa-users text-[#3A5A40]"></i> 전체 회원 개인정보 종합 관리 (Owner 총괄)
+                            </h3>
+                            <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 border border-[#3A5A40]/30 font-medium">
+                                모든 회원의 실명, 이메일, 전화번호 접근 열람 허용
+                            </span>
+                        </div>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse">
+                                <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
+                                    <tr>
+                                        <th class="p-2.5">회원 ID</th>
+                                        <th class="p-2.5">실명</th>
+                                        <th class="p-2.5">이메일 계정</th>
+                                        <th class="p-2.5">별명</th>
+                                        <th class="p-2.5">연락처</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${membersRows}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             `;
@@ -1984,6 +2322,13 @@
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
             currentAdminUsers = await resUsers.json();
+
+            const resOwner = await fetch('/api/owner/data', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            const ownerData = await resOwner.json();
+            const allListings = ownerData.listings || [];
+            const allMeetings = ownerData.meetings || [];
 
             let usersRows = '';
             currentAdminUsers.forEach(u => {
@@ -2012,89 +2357,184 @@
                 `;
             });
 
+            let adminListingsRows = '';
+            allListings.forEach(l => {
+                adminListingsRows += `
+                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
+                        <td class="p-2 font-mono text-[11px]">${l.listing_id}</td>
+                        <td class="p-2 font-bold">${l.title}</td>
+                        <td class="p-2 text-black/70">${l.address || ''}</td>
+                        <td class="p-2 text-[#3A5A40] font-bold">${l.price_display || ''}</td>
+                        <td class="p-2">${l.assistant_nickname || ''}</td>
+                        <td class="p-2"><span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px]">${l.listing_status || 'ACTIVE'}</span></td>
+                    </tr>
+                `;
+            });
+
+            let adminMeetingsHtml = '';
+            if (allMeetings.length === 0) {
+                adminMeetingsHtml = `<p class="text-xs text-black/40 py-3">전체 Google Meet 미팅 내역이 없습니다.</p>`;
+            } else {
+                allMeetings.forEach(m => {
+                    const timelineHtml = renderHistoryTimeline(m.history);
+                    const statusBadge = getStatusBadge(m.status);
+
+                    let adminPgAction = '';
+                    if (m.status === 'CANCEL_APPROVED_REFUND_PENDING') {
+                        adminPgAction = `
+                            <div class="flex items-center gap-2 pt-2 border-t border-indigo-200 bg-indigo-50 p-2.5 rounded">
+                                <span class="text-indigo-900 font-bold text-[11px] flex items-center gap-1">
+                                    <i class="fa-solid fa-credit-card text-indigo-700"></i> Owner 승인 완료건 (PG 결제 취소 대기):
+                                </span>
+                                <button onclick="adminExecutePgRefund('${m.meeting_id}')" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3 py-1.5 text-[11px] rounded shadow-sm uppercase transition flex items-center gap-1">
+                                    <i class="fa-solid fa-rotate-left"></i> PG사 환불요청 실행
+                                </button>
+                            </div>
+                        `;
+                    }
+
+                    adminMeetingsHtml += `
+                        <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs rounded-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        ${statusBadge}
+                                    </div>
+                                    <h4 class="font-serif italic text-base text-[#1A1A1A] font-bold mt-1">${m.listing_title}</h4>
+                                    <p class="text-black/70 text-[11px] mt-0.5">상담 지정 일시: <strong>${m.start_time ? m.start_time.replace('T', ' ') : ''}</strong></p>
+                                </div>
+                                <div class="text-right text-[11px] space-y-0.5">
+                                    <p class="text-[#3A5A40] font-bold">담당 보조원: ${m.assistant_nickname || ''}</p>
+                                    <p class="text-black/80 font-medium">신청 회원: ${m.member_nickname || ''} (${m.member_email || ''})</p>
+                                </div>
+                            </div>
+                            ${adminPgAction}
+                            ${timelineHtml}
+                        </div>
+                    `;
+                });
+            }
+
             container.innerHTML = `
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <!-- Owner Legal Metadata Config Editor (Header & Footer Dynamic Binding) -->
-                    <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                            <i class="fa-solid fa-sliders text-[#3A5A40]"></i> 개업공인중개사 법적 공시 메타데이터 설정 (Admin)
-                        </h3>
-                        <form onsubmit="handleSaveOwnerConfig(event)" class="space-y-3 text-xs">
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="block text-black/60 mb-1">중개사무소 상호명</label>
-                                    <input type="text" id="admin-office-name" value="${ownerConfig.office_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                <div class="space-y-6">
+                    <!-- Config & User Control Grid -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <!-- Owner Legal Metadata Config Editor -->
+                        <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-sliders text-[#3A5A40]"></i> 개업공인중개사 법적 공시 메타데이터 설정 (Admin)
+                            </h3>
+                            <form onsubmit="handleSaveOwnerConfig(event)" class="space-y-3 text-xs">
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-black/60 mb-1">중개사무소 상호명</label>
+                                        <input type="text" id="admin-office-name" value="${ownerConfig.office_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                    <div>
+                                        <label class="block text-black/60 mb-1">대표자 성명</label>
+                                        <input type="text" id="admin-owner-name" value="${ownerConfig.owner_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
                                 </div>
                                 <div>
-                                    <label class="block text-black/60 mb-1">대표자 성명</label>
-                                    <input type="text" id="admin-owner-name" value="${ownerConfig.owner_name || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    <label class="block text-black/60 mb-1">사업장 주소</label>
+                                    <input type="text" id="admin-address" value="${ownerConfig.address || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
                                 </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-black/60 mb-1">사업자등록번호</label>
+                                        <input type="text" id="admin-biz-num" value="${ownerConfig.business_reg_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                    <div>
+                                        <label class="block text-black/60 mb-1">영업허가 등록번호</label>
+                                        <input type="text" id="admin-lic-num" value="${ownerConfig.license_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-black/60 mb-1">대표 무선연락처</label>
+                                        <input type="text" id="admin-mobile" value="${ownerConfig.mobile_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                    <div>
+                                        <label class="block text-black/60 mb-1">대표 유선전화</label>
+                                        <input type="text" id="admin-landline" value="${ownerConfig.landline_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-black/60 mb-1">팩스 번호</label>
+                                        <input type="text" id="admin-fax" value="${ownerConfig.fax_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                    <div>
+                                        <label class="block text-black/60 mb-1">공식 이메일</label>
+                                        <input type="email" id="admin-email" value="${ownerConfig.email || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition mt-2">
+                                    Header & Footer 전역 동적 바인딩 저장
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- User Management Table -->
+                        <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                            <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                                <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                    <i class="fa-solid fa-users-gear text-[#3A5A40]"></i> 사용자 계정 및 권한 제어
+                                </h3>
+                                <span class="text-[10px] text-[#3A5A40] bg-[#3A5A40]/10 px-2.5 py-1 font-bold border border-[#3A5A40]/30">
+                                    Admin 전역 편집 권한
+                                </span>
                             </div>
-                            <div>
-                                <label class="block text-black/60 mb-1">사업장 주소</label>
-                                <input type="text" id="admin-address" value="${ownerConfig.address || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
+                            <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                                <table class="w-full text-left border-collapse">
+                                    <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
+                                        <tr>
+                                            <th class="p-2">ID</th>
+                                            <th class="p-2">이메일</th>
+                                            <th class="p-2">별명</th>
+                                            <th class="p-2">권한</th>
+                                            <th class="p-2">관리</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${usersRows}
+                                    </tbody>
+                                </table>
                             </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="block text-black/60 mb-1">사업자등록번호</label>
-                                    <input type="text" id="admin-biz-num" value="${ownerConfig.business_reg_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                                <div>
-                                    <label class="block text-black/60 mb-1">영업허가 등록번호</label>
-                                    <input type="text" id="admin-lic-num" value="${ownerConfig.license_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="block text-black/60 mb-1">대표 무선연락처</label>
-                                    <input type="text" id="admin-mobile" value="${ownerConfig.mobile_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                                <div>
-                                    <label class="block text-black/60 mb-1">대표 유선전화</label>
-                                    <input type="text" id="admin-landline" value="${ownerConfig.landline_phone || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2">
-                                <div>
-                                    <label class="block text-black/60 mb-1">팩스 번호</label>
-                                    <input type="text" id="admin-fax" value="${ownerConfig.fax_num || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                                <div>
-                                    <label class="block text-black/60 mb-1">공식 이메일</label>
-                                    <input type="email" id="admin-email" value="${ownerConfig.email || ''}" required class="w-full bg-white border border-black/15 p-2 text-[#1A1A1A]">
-                                </div>
-                            </div>
-                            <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2 text-xs uppercase tracking-wider transition mt-2">
-                                Header & Footer 전역 동적 바인딩 저장
-                            </button>
-                        </form>
+                        </div>
                     </div>
 
-                    <!-- User Management Table -->
-                    <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
-                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                                <i class="fa-solid fa-users-gear text-[#3A5A40]"></i> 사용자 계정 및 권한 제어
-                            </h3>
-                            <span class="text-[10px] text-[#3A5A40] bg-[#3A5A40]/10 px-2.5 py-1 font-bold border border-[#3A5A40]/30">
-                                Admin 전역 편집 권한
-                            </span>
-                        </div>
-                        <div class="overflow-x-auto max-h-96 overflow-y-auto">
+                    <!-- All Land Listings Section -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                            <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 플랫폼 전체 등록 토지매물 정보 내역 (Staff 등록 건 포함)
+                        </h3>
+                        <div class="overflow-x-auto">
                             <table class="w-full text-left border-collapse">
                                 <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
                                     <tr>
                                         <th class="p-2">ID</th>
-                                        <th class="p-2">이메일</th>
-                                        <th class="p-2">별명</th>
-                                        <th class="p-2">권한</th>
-                                        <th class="p-2">관리</th>
+                                        <th class="p-2">매물명</th>
+                                        <th class="p-2">주소지</th>
+                                        <th class="p-2">희망가</th>
+                                        <th class="p-2">담당 보조원</th>
+                                        <th class="p-2">상태</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${usersRows}
+                                    ${adminListingsRows}
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- All Google Meet Consultations with PG Refund Action -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                            <i class="fa-solid fa-headset text-[#3A5A40]"></i> Member, Staff, Owner 간 Google Meet 연결 내역 & 이벤트 시간 정보
+                        </h3>
+                        <div class="space-y-3">
+                            ${adminMeetingsHtml}
                         </div>
                     </div>
                 </div>
