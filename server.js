@@ -245,7 +245,7 @@ const inMemoryDB = {
       assistant_id: 'u-staff-1',
       assistant_nickname: '김보조원',
       assistant_phone: '010-3333-4444',
-      meet_link: 'https://meet.google.com/abc-defg-hij',
+      meet_link: 'https://meet.google.com/new',
       start_time: '2026-08-01T14:00',
       status: 'CONFIRMED', // CONFIRMED, COMPLETED, CANCELLED_REFUNDED
       amount: 50000,
@@ -486,7 +486,12 @@ app.get('/api/auth/google/url', (req, res) => {
 // Auth - Google OAuth2.0 Callback Handler
 const handleGoogleCallback = async (req, res) => {
   try {
-    const { code } = req.query;
+    const { code, error } = req.query;
+
+    if (error === 'access_denied') {
+      throw new Error('access_denied: OAuth 동의 화면이 테스트(Testing) 모드로 설정되어 있어 승인되지 않은 구글 계정의 로그인이 차단되었습니다.');
+    }
+
     if (!code) {
       return res.status(400).send('OAuth 인가 코드가 전달되지 않았습니다.');
     }
@@ -635,6 +640,7 @@ const handleGoogleCallback = async (req, res) => {
 
     const isInvalidClient = err.message && (err.message.includes('invalid_client') || err.message.includes('401'));
     const isRedirectMismatch = err.message && (err.message.includes('redirect_uri_mismatch') || err.message.includes('redirect_uri'));
+    const isAccessDenied = (req.query && req.query.error === 'access_denied') || (err.message && (err.message.includes('access_denied') || err.message.includes('403')));
     
     let errorTitle = 'Google OAuth 로그인 오류';
     let errorMessage = err.message || '알 수 없는 인증 오류가 발생했습니다.';
@@ -643,7 +649,30 @@ const handleGoogleCallback = async (req, res) => {
     const currentRedirectUri = getRedirectUri(req);
     const currentOrigin = currentRedirectUri.replace(/\/api\/auth\/google\/callback$/, '');
 
-    if (isInvalidClient) {
+    if (isAccessDenied) {
+      errorTitle = 'Google OAuth 액세스 차단 (access_denied / 403)';
+      errorMessage = 'Google Cloud Console의 OAuth 동의 화면이 [테스트 중(Testing)] 상태로 되어 있어 승인되지 않은 구글 계정의 접근이 차단되었습니다.';
+      solutionGuide = `
+        <div style="background:#FFF8F6; border:1px solid #FFD0C7; padding:16px; border-radius:6px; margin-top:16px; text-align:left;">
+          <h4 style="color:#D9381E; margin-top:0; margin-bottom:8px; font-size:14px;">🛠️ 해결 방법 (Google Cloud Console 설정)</h4>
+          <p style="font-size:13px; color:#444; margin-bottom:10px;">아래 방법 중 하나를 진행하시면 즉시 해결됩니다:</p>
+          <div style="font-size:13px; color:#333; line-height:1.7;">
+            <p style="margin:6px 0;"><strong>[방법 1] 모든 구글 계정 공개 (추천)</strong></p>
+            <ol style="margin:0; padding-left:20px;">
+              <li><a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" style="color:#0066CC; font-weight:bold;">Google Cloud Console -> OAuth 동의 화면</a> 접속</li>
+              <li>게시 상태(Publishing status)의 <strong>[앱 게시 (PUBLISH APP)]</strong> 버튼 클릭</li>
+              <li>확인 팝업에서 <strong>[CONFIRM / 확인]</strong> 클릭하여 앱을 게시 상태로 전환</li>
+            </ol>
+            <p style="margin:12px 0 6px 0;"><strong>[방법 2] 테스트 사용자 이메일 추가</strong></p>
+            <ol style="margin:0; padding-left:20px;">
+              <li><a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" style="color:#0066CC; font-weight:bold;">Google Cloud Console -> OAuth 동의 화면</a> 접속</li>
+              <li>하단 <strong>'테스트 사용자 (Test users)'</strong> 항목에서 <strong>[+ ADD USERS]</strong> 클릭</li>
+              <li>로그인할 구글 계정 이메일을 입력하고 저장</li>
+            </ol>
+          </div>
+        </div>
+      `;
+    } else if (isInvalidClient) {
       errorTitle = 'Google OAuth 보안 인증 실패 (invalid_client)';
       errorMessage = 'Google OAuth 2.0 인증 서버에서 Client Secret(클라이언트 보안 비밀) 검증을 실패했습니다.';
       solutionGuide = `
@@ -1122,8 +1151,9 @@ app.delete('/api/cart/:listing_id', authenticateToken, (req, res) => {
 
 // Helper to create Google Meet / Google Calendar Event via API
 async function createGoogleMeetEvent({ summary, description, startTime, memberEmail, staffEmail, tokens, req }) {
-  const fallbackMeetCode = Math.random().toString(36).substring(2, 5) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 5);
-  const fallbackLink = `https://meet.google.com/${fallbackMeetCode}`;
+  // Use official instant room launcher https://meet.google.com/new as fallback
+  // when Google Calendar/Meet API sync is not active, ensuring valid live room creation.
+  const fallbackLink = 'https://meet.google.com/new';
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
