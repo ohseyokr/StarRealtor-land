@@ -1843,6 +1843,193 @@
             }
         }
 
+        // Land Listing Approval Workflow Helper UI Functions
+        function getListingApprovalBadge(status) {
+            if (status === 'APPROVED') {
+                return `<span class="bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold px-2 py-0.5 text-[10px] rounded inline-flex items-center gap-1"><i class="fa-solid fa-circle-check text-emerald-600"></i> 승인완료 (정상게시)</span>`;
+            } else if (status === 'PENDING_REGISTRATION') {
+                return `<span class="bg-amber-100 text-amber-800 border border-amber-300 font-bold px-2 py-0.5 text-[10px] rounded inline-flex items-center gap-1"><i class="fa-solid fa-clock text-amber-600"></i> 등록승인요청 대기중</span>`;
+            } else if (status === 'PENDING_EDIT') {
+                return `<span class="bg-blue-100 text-blue-800 border border-blue-300 font-bold px-2 py-0.5 text-[10px] rounded inline-flex items-center gap-1"><i class="fa-solid fa-pen-to-square text-blue-600"></i> 수정승인요청 대기중</span>`;
+            } else if (status === 'PENDING_DELETE') {
+                return `<span class="bg-rose-100 text-rose-800 border border-rose-300 font-bold px-2 py-0.5 text-[10px] rounded inline-flex items-center gap-1"><i class="fa-solid fa-trash-can text-rose-600"></i> 삭제승인요청 대기중</span>`;
+            } else if (status === 'REJECTED') {
+                return `<span class="bg-red-100 text-red-800 border border-red-300 font-bold px-2 py-0.5 text-[10px] rounded inline-flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-red-600"></i> 승인반려됨</span>`;
+            }
+            return `<span class="bg-gray-100 text-gray-800 border border-gray-300 font-bold px-2 py-0.5 text-[10px] rounded">${status || 'ACTIVE'}</span>`;
+        }
+
+        function renderListingApprovalHistory(requests) {
+            if (!requests || requests.length === 0) {
+                return `<p class="text-[10px] text-black/40 italic py-1">승인 요청 및 결재 이력이 없습니다.</p>`;
+            }
+            let html = `<div class="mt-2 space-y-1.5 border-t border-black/10 pt-2 text-[11px]">`;
+            html += `<p class="font-bold text-[#3A5A40] text-[10px] flex items-center gap-1"><i class="fa-solid fa-clock-rotate-left"></i> Staff-Owner 승인 요청 및 처리 내역 (시간정보):</p>`;
+            requests.forEach(r => {
+                const reqTime = r.request_time ? r.request_time.replace('T', ' ').substring(0, 19) : '';
+                const decTime = r.decision_time ? r.decision_time.replace('T', ' ').substring(0, 19) : '';
+                
+                let typeText = r.request_type === 'REGISTRATION' ? '등록승인요청' : r.request_type === 'EDIT' ? '수정승인요청' : r.request_type === 'DELETE' ? '삭제승인요청' : r.request_type === 'ADMIN_ASSIGN_CHANGE' ? '관리자 담당Staff 변경' : '관리자 직권삭제';
+                let statusText = r.status === 'APPROVED' ? '<span class="text-emerald-700 font-bold">[승인완료]</span>' : r.status === 'REJECTED' ? '<span class="text-rose-700 font-bold">[반려됨]</span>' : '<span class="text-amber-700 font-bold">[대기중]</span>';
+
+                html += `
+                    <div class="bg-white p-2 border border-black/10 rounded-sm space-y-0.5">
+                        <div class="flex justify-between items-center text-[10px]">
+                            <span class="font-bold text-[#1A1A1A]">${typeText} - 요청: ${r.requester_name || ''} (${reqTime})</span>
+                            <span>결재상태: ${statusText}</span>
+                        </div>
+                        ${r.decision_time ? `
+                            <div class="text-[10px] text-black/70 flex justify-between items-center border-t border-black/5 pt-0.5">
+                                <span>결재자: <strong>${r.decider_name || '대표자'}</strong> (${decTime})</span>
+                            </div>
+                        ` : ''}
+                        ${r.rejection_reason ? `
+                            <div class="text-[10px] text-rose-800 bg-rose-50 p-1.5 border border-rose-200 mt-1 rounded font-medium">
+                                <strong>* 반려/처리 사유:</strong> ${r.rejection_reason}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            return html;
+        }
+
+        async function deleteCartItem(listingId) {
+            if (!confirm('선택하신 토지 매물을 관심 매물(장바구니)에서 삭제하시겠습니까?')) return;
+            try {
+                const res = await fetch(`/api/cart/${listingId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                });
+                if (!res.ok) throw new Error('삭제 처리 실패');
+                alert('관심 매물(장바구니)에서 삭제되었습니다.');
+                showDashboardView();
+            } catch(e) {
+                alert(`[오류] ${e.message}`);
+            }
+        }
+
+        async function staffSubmitApprovalRequest(listingId, requestType) {
+            const label = requestType === 'REGISTRATION' ? '등록승인요청' : requestType === 'DELETE' ? '삭제승인요청' : '승인요청';
+            if (!confirm(`해당 매물에 대해 대표자(Owner)에게 '${label}'을(를) 시간정보와 함께 전송하시겠습니까?`)) return;
+            try {
+                const res = await fetch(`/api/listings/${listingId}/request-approval`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ request_type: requestType })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '요청 실패');
+                alert(data.message || `${label}이 대표자에게 전송되었습니다.`);
+                showDashboardView();
+            } catch(e) {
+                alert(`[오류] ${e.message}`);
+            }
+        }
+
+        async function ownerDecisionListingApproval(listingId, decision) {
+            let rejectionReason = '';
+            if (decision === 'REJECT') {
+                rejectionReason = prompt('반려 사유를 직접 입력하여 주십시오. (Staff에게 전달됩니다):');
+                if (!rejectionReason || !rejectionReason.trim()) {
+                    alert('반려 처리 시에는 반드시 반려 사유를 입력하셔야 합니다.');
+                    return;
+                }
+            } else {
+                if (!confirm('해당 토지 매물 건에 대한 승인을 최종 확정하시겠습니까?')) return;
+            }
+
+            try {
+                const res = await fetch(`/api/listings/${listingId}/owner-approval-decision`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ decision, rejection_reason: rejectionReason })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '결정 처리 실패');
+                alert(data.message || '결정이 승인/반려 처리되었습니다.');
+                showDashboardView();
+            } catch(e) {
+                alert(`[오류] ${e.message}`);
+            }
+        }
+
+        async function adminChangeListingStaff(listingId) {
+            const resUsers = await fetch('/api/admin/users', {
+                headers: { 'Authorization': `Bearer ${currentUser.token}` }
+            });
+            const users = await resUsers.json();
+            const staffList = users.filter(u => u.role === 'STAFF' || u.role === 'ADMIN');
+
+            if (staffList.length === 0) {
+                alert('선택할 수 있는 Staff 계정이 없습니다.');
+                return;
+            }
+
+            let promptText = '변경할 담당 Staff의 ID를 정확히 입력하세요:\n\n';
+            staffList.forEach(s => {
+                promptText += `ID: ${s.user_id} (${s.nickname} / ${s.email})\n`;
+            });
+
+            const newStaffId = prompt(promptText);
+            if (!newStaffId) return;
+
+            const reason = prompt('담당 Staff 변경 사유를 직접 입력하여 주십시오 (Staff와 Owner가 알 수 있도록 저장됩니다):');
+            if (!reason || !reason.trim()) {
+                alert('담당 Staff 변경 사유를 반드시 입력해야 합니다.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/listings/${listingId}/admin-change-staff`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ new_staff_id: newStaffId.trim(), reason: reason.trim() })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '변경 실패');
+                alert(data.message || '담당 Staff가 변경되었습니다.');
+                showDashboardView();
+            } catch(e) {
+                alert(`[오류] ${e.message}`);
+            }
+        }
+
+        async function adminDeleteListing(listingId) {
+            const reason = prompt('매물 삭제 사유를 직접 입력하여 주십시오 (Staff와 Owner가 알 수 있도록 저장됩니다):');
+            if (!reason || !reason.trim()) {
+                alert('매물 삭제 시에는 반드시 삭제 사유를 입력해야 합니다.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/listings/${listingId}/admin-delete`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentUser.token}`
+                    },
+                    body: JSON.stringify({ reason: reason.trim() })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || '삭제 실패');
+                alert(data.message || '매물이 삭제 처리되었습니다.');
+                showDashboardView();
+            } catch(e) {
+                alert(`[오류] ${e.message}`);
+            }
+        }
+
         // Member Dashboard
         async function renderMemberDashboard(container) {
             const res = await fetch('/api/meetings/member', {
@@ -1856,19 +2043,42 @@
             if (selectedListings.length === 0) {
                 listingsHtml = `<p class="text-xs text-black/40 py-3">선택/관심 등록된 토지 매물 내역이 없습니다. (메인 매물 리스트에서 장바구니/미팅신청 가능)</p>`;
             } else {
+                listingsHtml = `
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase font-bold">
+                                <tr>
+                                    <th class="p-2">매물명</th>
+                                    <th class="p-2">소재지/지번</th>
+                                    <th class="p-2">지목</th>
+                                    <th class="p-2">면적</th>
+                                    <th class="p-2">희망가</th>
+                                    <th class="p-2 text-right">삭제/관리</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
                 selectedListings.forEach(l => {
                     listingsHtml += `
-                        <div class="p-3 bg-[#F5F2ED] border border-black/10 flex justify-between items-center text-xs">
-                            <div>
-                                <span class="font-bold text-[#1A1A1A]">${l.title}</span>
-                                <p class="text-[11px] text-black/60">${l.address || ''} | ${l.land_area_sqm || ''}㎡ (${l.land_area_pyeong || ''}평)</p>
-                            </div>
-                            <div class="text-right">
-                                <span class="font-bold text-[#3A5A40] text-sm">${l.price_display || ''}</span>
-                            </div>
-                        </div>
+                        <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
+                            <td class="p-2 font-bold">${l.title}</td>
+                            <td class="p-2 text-black/70 text-[11px]">${l.address || ''}</td>
+                            <td class="p-2 font-semibold text-[#3A5A40]">${l.jimok_official || '대'}</td>
+                            <td class="p-2 text-[11px]">${l.area_sqm || 0}㎡</td>
+                            <td class="p-2 font-bold text-[#3A5A40]">${l.price_display || ''}</td>
+                            <td class="p-2 text-right">
+                                <button onclick="deleteCartItem('${l.listing_id}')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[10px] rounded transition shadow-2xs">
+                                    <i class="fa-solid fa-trash-can mr-1"></i> Cart 삭제
+                                </button>
+                            </td>
+                        </tr>
                     `;
                 });
+                listingsHtml += `
+                            </tbody>
+                        </table>
+                    </div>
+                `;
             }
 
             let meetingsHtml = '';
@@ -1931,20 +2141,23 @@
 
             container.innerHTML = `
                 <div class="space-y-6">
-                    <!-- Section 1: Selected Land Listings -->
+                    <!-- Section 1: Shopping Cart Land Listings -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
-                            <i class="fa-solid fa-layer-group text-[#3A5A40]"></i> 내가 선택/관심 등록한 토지매물 정보 내역
-                        </h3>
-                        <div class="space-y-2">
-                            ${listingsHtml}
+                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                                <i class="fa-solid fa-cart-shopping text-[#3A5A40]"></i> Cart 선택 토지 매물 내역 조회 및 삭제
+                            </h3>
+                            <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 font-bold border border-[#3A5A40]/30">
+                                Member 장바구니 리스트
+                            </span>
                         </div>
+                        ${listingsHtml}
                     </div>
 
                     <!-- Section 2: Meetings & History Timeline -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                         <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
-                            <i class="fa-solid fa-calendar-check text-[#3A5A40]"></i> Google Meet 화상 상담 미팅연결 일정 및 이벤트 내역
+                            <i class="fa-solid fa-calendar-check text-[#3A5A40]"></i> Google Meet 화상 상담 미팅연결 일정 및 이벤트 처리 내역
                         </h3>
                         <div class="space-y-3">
                             ${meetingsHtml}
@@ -1955,31 +2168,15 @@
         }
 
         // Staff Dashboard
-        // Privacy Isolation: Staff can ONLY see Member ID & Nickname!
+        let currentStaffListings = [];
+
         async function renderStaffDashboard(container) {
             const res = await fetch('/api/meetings/staff', {
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
             const data = await res.json();
             const meetings = data.meetings || [];
-            const staffListings = data.listings || [];
-
-            let listingsHtml = '';
-            if (staffListings.length === 0) {
-                listingsHtml = `<p class="text-xs text-black/40 py-3">내가 등록/배정한 토지매물이 없습니다.</p>`;
-            } else {
-                staffListings.forEach(l => {
-                    listingsHtml += `
-                        <div class="p-3 bg-[#F5F2ED] border border-black/10 flex justify-between items-center text-xs">
-                            <div>
-                                <span class="font-bold text-[#1A1A1A]">${l.title}</span>
-                                <p class="text-[11px] text-black/60">${l.address || ''} | ${l.price_display || ''}</p>
-                            </div>
-                            <span class="text-[10px] bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30">${l.listing_status || 'ACTIVE'}</span>
-                        </div>
-                    `;
-                });
-            }
+            currentStaffListings = data.listings || [];
 
             let meetsHtml = '';
             if (meetings.length === 0) {
@@ -2047,10 +2244,10 @@
             }
 
             container.innerHTML = `
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    <!-- Staff Profile & Registered Listings -->
-                    <div class="lg:col-span-5 space-y-6">
-                        <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                <div class="space-y-6">
+                    <!-- Top Grid: Profile & New Listing Button -->
+                    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                             <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
                                 <i class="fa-solid fa-id-badge text-[#3A5A40]"></i> 중개보조원 개인정보 수정
                             </h3>
@@ -2069,117 +2266,167 @@
                             </form>
                         </div>
 
-                        <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                                <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 내가 등록한 토지매물 정보 내역
-                            </h3>
-                            <div class="space-y-2">
-                                ${listingsHtml}
+                        <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm flex flex-col justify-between">
+                            <div>
+                                <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2 mb-2">
+                                    <i class="fa-solid fa-building-flag text-[#3A5A40]"></i> 신규 토지매물 정보 입력 및 등록
+                                </h3>
+                                <p class="text-xs text-black/60 leading-relaxed">
+                                    중개보조원은 담당 토지매물 정보를 입력/저장 관리할 수 있으며, 대표자(Owner)에게 시간정보와 함께 등록승인요청, 수정승인요청 및 삭제승인요청을 전송할 수 있습니다.
+                                </p>
                             </div>
+                            <button onclick="openModal('add-listing-modal')" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white text-xs font-bold py-3 uppercase tracking-wider transition shadow-md flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-plus-circle"></i> + 신규 토지매물 수집/입력 등록
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Staff Managed Listings Table with Search & Filtering -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex flex-col md:flex-row justify-between md:items-center gap-3 border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 내가 관리하는 토지매물 정보 내역 (승인/반려 상태)
+                            </h3>
+                            <!-- Filters -->
+                            <div class="flex items-center gap-2 text-xs">
+                                <input type="text" id="staff-filter-jibun" onkeyup="filterStaffListings()" placeholder="지번 / 소재지 검색..." class="bg-[#F5F2ED] border border-black/20 p-1.5 text-xs rounded focus:outline-none focus:border-[#3A5A40]">
+                                <select id="staff-filter-jimok" onchange="filterStaffListings()" class="bg-[#F5F2ED] border border-black/20 p-1.5 text-xs rounded font-bold text-[#3A5A40] focus:outline-none">
+                                    <option value="">토지지목별 (전체)</option>
+                                    <option value="대">대 (대지)</option>
+                                    <option value="전">전 (밭)</option>
+                                    <option value="답">답 (논)</option>
+                                    <option value="임">임 (임야)</option>
+                                    <option value="과">과 (과수원)</option>
+                                    <option value="장">장 (공장용지)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="staff-listings-table-container" class="space-y-3">
+                            <!-- Populated via filterStaffListings() -->
                         </div>
                     </div>
 
                     <!-- Staff Meetings List -->
-                    <div class="lg:col-span-7 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <div class="flex justify-between items-center">
-                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> Google Meet 연결 내역 & 이벤트 시간 정보
-                            </h3>
-                            <button onclick="openModal('add-listing-modal')" class="bg-[#3A5A40] text-white text-[11px] font-bold px-3 py-1 uppercase">
-                                + 매물 수집 등록
-                            </button>
-                        </div>
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                            <i class="fa-solid fa-headset text-[#3A5A40]"></i> 담당 Member와의 Google Meet 연결 내역 & 이벤트 시간 정보
+                        </h3>
                         <div class="space-y-3">
                             ${meetsHtml}
                         </div>
                     </div>
                 </div>
             `;
+
+            filterStaffListings();
         }
 
-        async function handleUpdateStaffProfile(e) {
-            e.preventDefault();
-            const nickname = document.getElementById('staff-edit-nickname').value;
-            const phone_number = document.getElementById('staff-edit-phone').value;
+        function filterStaffListings() {
+            const container = document.getElementById('staff-listings-table-container');
+            if (!container) return;
 
-            try {
-                const res = await fetch('/api/staff/profile', {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${currentUser.token}`
-                    },
-                    body: JSON.stringify({ nickname, phone_number })
-                });
-                alert('프로필이 저장되었습니다.');
-                currentUser.nickname = nickname;
-                updateAuthUI();
-            } catch (err) {
-                alert('저장 실패');
-            }
-        }
+            const jibunQuery = (document.getElementById('staff-filter-jibun')?.value || '').toLowerCase().trim();
+            const jimokQuery = document.getElementById('staff-filter-jimok')?.value || '';
 
-        async function updateStaffMeetingStatus(meetingId, newStatus) {
-            try {
-                const res = await fetch(`/api/meetings/${meetingId}/status`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${currentUser.token}`
-                    },
-                    body: JSON.stringify({ status: newStatus })
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || '상태 업데이트 실패');
-                alert(`미팅 상태가 '${newStatus}'(으)로 업데이트되었습니다.`);
-                showDashboardView();
-            } catch (err) {
-                alert(`[오류] ${err.message}`);
-            }
-        }
+            const filtered = currentStaffListings.filter(l => {
+                const matchesJibun = !jibunQuery || (l.address || '').toLowerCase().includes(jibunQuery) || (l.title || '').toLowerCase().includes(jibunQuery);
+                const matchesJimok = !jimokQuery || (l.jimok_official === jimokQuery);
+                return matchesJibun && matchesJimok;
+            });
 
-        async function regenerateStaffGoogleMeet(meetingId) {
-            try {
-                const res = await fetch(`/api/meetings/${meetingId}/google-meet`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${currentUser.token}`
-                    }
-                });
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Meet 연동 실패');
-                alert(data.message || 'Google Meet API 일정이 성공적으로 생성/갱신되었습니다.');
-                showDashboardView();
-            } catch (err) {
-                alert(`[Google Meet API 연동 오류] ${err.message}`);
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="text-xs text-black/40 py-4 text-center">조건에 해당하는 토지 매물이 없습니다.</p>`;
+                return;
             }
+
+            let html = `
+                <div class="space-y-3">
+            `;
+            filtered.forEach(l => {
+                const badge = getListingApprovalBadge(l.approval_status || 'APPROVED');
+                const historyHtml = renderListingApprovalHistory(l.approval_requests);
+
+                html += `
+                    <div class="p-4 bg-[#F5F2ED] border border-black/10 text-xs rounded space-y-2">
+                        <div class="flex flex-col md:flex-row justify-between md:items-center gap-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    ${badge}
+                                    <span class="font-mono text-[11px] text-black/50">${l.listing_id}</span>
+                                    <span class="font-bold text-[#3A5A40] text-xs">지목: ${l.jimok_official || '대'}</span>
+                                </div>
+                                <h4 class="font-bold text-[#1A1A1A] text-sm">${l.title}</h4>
+                                <p class="text-[11px] text-black/70">지번/소재지: ${l.address || ''} | 면적: ${l.area_sqm || 0}㎡ | 희망가: ${l.price_display || ''}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button onclick="staffSubmitApprovalRequest('${l.listing_id}', 'REGISTRATION')" class="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs">
+                                    등록승인요청
+                                </button>
+                                <button onclick="openModal('add-listing-modal')" class="bg-blue-700 hover:bg-blue-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs">
+                                    수정승인요청
+                                </button>
+                                <button onclick="staffSubmitApprovalRequest('${l.listing_id}', 'DELETE')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs">
+                                    삭제승인요청
+                                </button>
+                            </div>
+                        </div>
+                        ${historyHtml}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
         }
 
         // Owner Portal
-        // Owner can see ALL Members full info, Staff info, Listings
+        let currentOwnerListings = [];
+
         async function renderOwnerDashboard(container) {
             const res = await fetch('/api/owner/data', {
                 headers: { 'Authorization': `Bearer ${currentUser.token}` }
             });
             const data = await res.json();
             const members = data.members || [];
-            const listings = data.listings || [];
+            currentOwnerListings = data.listings || [];
             const meetings = data.meetings || [];
+            const staffMembers = data.staff || [];
 
-            let staffListingsRows = '';
-            listings.forEach(l => {
-                staffListingsRows += `
-                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
-                        <td class="p-2.5 font-mono text-[11px]">${l.listing_id}</td>
-                        <td class="p-2.5 font-bold">${l.title}</td>
-                        <td class="p-2.5 text-black/70">${l.address || ''}</td>
-                        <td class="p-2.5 text-[#3A5A40] font-bold">${l.price_display || ''}</td>
-                        <td class="p-2.5 font-medium">${l.assistant_nickname || ''} (${l.assistant_phone || ''})</td>
-                        <td class="p-2.5"><span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px]">${l.listing_status || 'ACTIVE'}</span></td>
-                    </tr>
-                `;
-            });
+            // Pending approval requests queue for Owner
+            const pendingListings = currentOwnerListings.filter(l => l.approval_status && l.approval_status.startsWith('PENDING'));
+            let pendingRequestsHtml = '';
+
+            if (pendingListings.length === 0) {
+                pendingRequestsHtml = `<p class="text-xs text-black/40 py-3">현재 결재 대기 중인 Staff 승인요청 내역이 없습니다.</p>`;
+            } else {
+                pendingListings.forEach(l => {
+                    const badge = getListingApprovalBadge(l.approval_status);
+                    const latestReq = (l.approval_requests && l.approval_requests.length > 0) ? l.approval_requests[0] : null;
+                    const reqTime = latestReq ? latestReq.request_time.replace('T', ' ').substring(0, 19) : '';
+
+                    pendingRequestsHtml += `
+                        <div class="p-3 bg-amber-50/80 border border-amber-200 rounded text-xs space-y-2">
+                            <div class="flex justify-between items-center">
+                                <div class="flex items-center gap-2">
+                                    ${badge}
+                                    <span class="font-bold text-[#1A1A1A]">${l.title}</span>
+                                </div>
+                                <div class="flex items-center gap-1.5">
+                                    <button onclick="ownerDecisionListingApproval('${l.listing_id}', 'APPROVE')" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-3 py-1 text-[11px] rounded shadow-sm">
+                                        <i class="fa-solid fa-check mr-1"></i> 승인
+                                    </button>
+                                    <button onclick="ownerDecisionListingApproval('${l.listing_id}', 'REJECT')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-3 py-1 text-[11px] rounded shadow-sm">
+                                        <i class="fa-solid fa-xmark mr-1"></i> 반려 (사유입력)
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-black/70">
+                                <strong>요청자 Staff:</strong> ${l.assistant_nickname || ''} | <strong>요청시간:</strong> ${reqTime} | <strong>지번/소재지:</strong> ${l.address || ''}
+                            </p>
+                        </div>
+                    `;
+                });
+            }
 
             let meetsHtml = '';
             if (meetings.length === 0) {
@@ -2241,38 +2488,58 @@
                 `;
             });
 
+            // Staff select options for owner filter
+            let staffOptionsHtml = '<option value="">Staff 성명/별명 (전체)</option>';
+            staffMembers.forEach(s => {
+                staffOptionsHtml += `<option value="${s.nickname}">${s.nickname} (${s.name || s.nickname})</option>`;
+            });
+
             container.innerHTML = `
                 <div class="space-y-6">
-                    <!-- Section 1: Staff Registered Land Listings -->
+                    <!-- Section 1: Staff Approval Requests Queue (등록/수정/삭제 승인요청) -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                         <div class="flex justify-between items-center border-b border-black/10 pb-3">
                             <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
-                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> Staff 중개보조원이 등록한 토지매물 정보 내역
+                                <i class="fa-solid fa-[#3A5A40] fa-bell text-[#3A5A40]"></i> Staff 토지매물 등록/수정/삭제 승인요청 수신 내역
                             </h3>
-                            <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 border border-[#3A5A40]/30 font-medium">
-                                전체 등록 토지 매물 리스트
+                            <span class="text-xs text-amber-800 bg-amber-50 px-3 py-1 border border-amber-200 font-bold">
+                                승인 또는 반려 처리 (반려시 사유 직접 입력 필수)
                             </span>
                         </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
-                                <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
-                                    <tr>
-                                        <th class="p-2.5">매물 ID</th>
-                                        <th class="p-2.5">매물명</th>
-                                        <th class="p-2.5">소재지</th>
-                                        <th class="p-2.5">희망 매매가</th>
-                                        <th class="p-2.5">담당 보조원</th>
-                                        <th class="p-2.5">상태</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${staffListingsRows}
-                                </tbody>
-                            </table>
+                        <div class="space-y-2">
+                            ${pendingRequestsHtml}
                         </div>
                     </div>
 
-                    <!-- Section 2: Google Meet Consultation History & Decisions -->
+                    <!-- Section 2: All Staff Registered Land Listings with Filters -->
+                    <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
+                        <div class="flex flex-col md:flex-row justify-between md:items-center gap-3 border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
+                                <i class="fa-solid fa-list-check text-[#3A5A40]"></i> Staff 토지매물 관리종합 (토지지번별/지목별/Staff성명별 조회)
+                            </h3>
+                            <div class="flex items-center gap-2 text-xs">
+                                <input type="text" id="owner-filter-jibun" onkeyup="filterOwnerListings()" placeholder="지번 / 소재지 검색..." class="bg-[#F5F2ED] border border-black/20 p-1.5 text-xs rounded focus:outline-none focus:border-[#3A5A40]">
+                                <select id="owner-filter-jimok" onchange="filterOwnerListings()" class="bg-[#F5F2ED] border border-black/20 p-1.5 text-xs rounded font-bold text-[#3A5A40] focus:outline-none">
+                                    <option value="">토지지목별 (전체)</option>
+                                    <option value="대">대 (대지)</option>
+                                    <option value="전">전 (밭)</option>
+                                    <option value="답">답 (논)</option>
+                                    <option value="임">임 (임야)</option>
+                                    <option value="과">과 (과수원)</option>
+                                    <option value="장">장 (공장용지)</option>
+                                </select>
+                                <select id="owner-filter-staff" onchange="filterOwnerListings()" class="bg-[#F5F2ED] border border-black/20 p-1.5 text-xs rounded font-bold text-[#3A5A40] focus:outline-none">
+                                    ${staffOptionsHtml}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="owner-listings-table-container">
+                            <!-- Populated via filterOwnerListings() -->
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Google Meet Consultation History & Decisions -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                         <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
                             <i class="fa-solid fa-headset text-[#3A5A40]"></i> Member와 Staff간의 Google Meet 연결 내역 & 이벤트 시간 정보
@@ -2282,7 +2549,7 @@
                         </div>
                     </div>
 
-                    <!-- Section 3: All Members Privacy Full Access -->
+                    <!-- Section 4: All Members Privacy Full Access -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                         <div class="flex justify-between items-center border-b border-black/10 pb-3">
                             <h3 class="font-serif italic text-[#1A1A1A] text-lg flex items-center gap-2">
@@ -2311,10 +2578,68 @@
                     </div>
                 </div>
             `;
+
+            filterOwnerListings();
+        }
+
+        function filterOwnerListings() {
+            const container = document.getElementById('owner-listings-table-container');
+            if (!container) return;
+
+            const jibunQuery = (document.getElementById('owner-filter-jibun')?.value || '').toLowerCase().trim();
+            const jimokQuery = document.getElementById('owner-filter-jimok')?.value || '';
+            const staffQuery = document.getElementById('owner-filter-staff')?.value || '';
+
+            const filtered = currentOwnerListings.filter(l => {
+                const matchesJibun = !jibunQuery || (l.address || '').toLowerCase().includes(jibunQuery) || (l.title || '').toLowerCase().includes(jibunQuery);
+                const matchesJimok = !jimokQuery || (l.jimok_official === jimokQuery);
+                const matchesStaff = !staffQuery || (l.assistant_nickname === staffQuery);
+                return matchesJibun && matchesJimok && matchesStaff;
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="text-xs text-black/40 py-4 text-center">조건에 일치하는 토지 매물이 없습니다.</p>`;
+                return;
+            }
+
+            let html = `
+                <div class="space-y-3">
+            `;
+            filtered.forEach(l => {
+                const badge = getListingApprovalBadge(l.approval_status || 'APPROVED');
+                const historyHtml = renderListingApprovalHistory(l.approval_requests);
+
+                html += `
+                    <div class="p-4 bg-[#F5F2ED] border border-black/10 text-xs rounded space-y-2">
+                        <div class="flex flex-col md:flex-row justify-between md:items-center gap-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    ${badge}
+                                    <span class="font-mono text-[11px] text-black/50">${l.listing_id}</span>
+                                    <span class="font-bold text-[#3A5A40]">담당 Staff: ${l.assistant_nickname || ''}</span>
+                                </div>
+                                <h4 class="font-bold text-[#1A1A1A] text-sm">${l.title}</h4>
+                                <p class="text-[11px] text-black/70">지번/소재지: ${l.address || ''} | 지목: ${l.jimok_official || '대'} | 희망가: ${l.price_display || ''}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button onclick="ownerDecisionListingApproval('${l.listing_id}', 'APPROVE')" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs">
+                                    승인
+                                </button>
+                                <button onclick="ownerDecisionListingApproval('${l.listing_id}', 'REJECT')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs">
+                                    반려(사유)
+                                </button>
+                            </div>
+                        </div>
+                        ${historyHtml}
+                    </div>
+                `;
+            });
+            html += `</div>`;
+            container.innerHTML = html;
         }
 
         // Admin Console
-        // Admin can edit Owner Legal Metadata for Header & Footer, Manage Users and Roles
+        // Admin can edit Owner Legal Metadata, Manage Users and Roles, Reassign Staff & Delete Listings
         let currentAdminUsers = [];
 
         async function renderAdminDashboard(container) {
@@ -2357,17 +2682,34 @@
                 `;
             });
 
-            let adminListingsRows = '';
+            let adminListingsHtml = '';
             allListings.forEach(l => {
-                adminListingsRows += `
-                    <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
-                        <td class="p-2 font-mono text-[11px]">${l.listing_id}</td>
-                        <td class="p-2 font-bold">${l.title}</td>
-                        <td class="p-2 text-black/70">${l.address || ''}</td>
-                        <td class="p-2 text-[#3A5A40] font-bold">${l.price_display || ''}</td>
-                        <td class="p-2">${l.assistant_nickname || ''}</td>
-                        <td class="p-2"><span class="bg-[#3A5A40]/10 text-[#3A5A40] font-bold px-2 py-0.5 border border-[#3A5A40]/30 text-[10px]">${l.listing_status || 'ACTIVE'}</span></td>
-                    </tr>
+                const badge = getListingApprovalBadge(l.approval_status || 'APPROVED');
+                const historyHtml = renderListingApprovalHistory(l.approval_requests);
+
+                adminListingsHtml += `
+                    <div class="p-4 bg-[#F5F2ED] border border-black/10 text-xs rounded space-y-2">
+                        <div class="flex flex-col md:flex-row justify-between md:items-center gap-2">
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    ${badge}
+                                    <span class="font-mono text-[11px] text-black/50">${l.listing_id}</span>
+                                    <span class="font-bold text-[#3A5A40]">담당 Staff: ${l.assistant_nickname || '담당자미지정'}</span>
+                                </div>
+                                <h4 class="font-bold text-[#1A1A1A] text-sm">${l.title}</h4>
+                                <p class="text-[11px] text-black/70">지번/소재지: ${l.address || ''} | 지목: ${l.jimok_official || '대'} | 희망가: ${l.price_display || ''}</p>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <button onclick="adminChangeListingStaff('${l.listing_id}')" class="bg-indigo-700 hover:bg-indigo-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs flex items-center gap-1">
+                                    <i class="fa-solid fa-user-pen"></i> 담당 Staff 변경 (사유입력)
+                                </button>
+                                <button onclick="adminDeleteListing('${l.listing_id}')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs flex items-center gap-1">
+                                    <i class="fa-solid fa-trash-can"></i> 매물 삭제 (사유입력)
+                                </button>
+                            </div>
+                        </div>
+                        ${historyHtml}
+                    </div>
                 `;
             });
 
@@ -2504,27 +2846,18 @@
                         </div>
                     </div>
 
-                    <!-- All Land Listings Section -->
+                    <!-- Staff - Owner 승인요청 / 승인 / 반려 내역 및 관리자 Staff 변경 & 삭제 관리 -->
                     <div class="bg-white p-6 border border-black/10 space-y-4 shadow-sm">
-                        <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                            <i class="fa-solid fa-map-location-dot text-[#3A5A40]"></i> 플랫폼 전체 등록 토지매물 정보 내역 (Staff 등록 건 포함)
-                        </h3>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
-                                <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase tracking-wider font-bold">
-                                    <tr>
-                                        <th class="p-2">ID</th>
-                                        <th class="p-2">매물명</th>
-                                        <th class="p-2">주소지</th>
-                                        <th class="p-2">희망가</th>
-                                        <th class="p-2">담당 보조원</th>
-                                        <th class="p-2">상태</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${adminListingsRows}
-                                </tbody>
-                            </table>
+                        <div class="flex justify-between items-center border-b border-black/10 pb-3">
+                            <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
+                                <i class="fa-solid fa-timeline text-[#3A5A40]"></i> Staff - Owner 승인요청/승인/반려 내역 (시간정보) & Staff 변경 / 직권삭제 관리
+                            </h3>
+                            <span class="text-xs text-[#3A5A40] bg-[#3A5A40]/10 px-3 py-1 font-bold border border-[#3A5A40]/30">
+                                Admin 권한 통제
+                            </span>
+                        </div>
+                        <div class="space-y-3">
+                            ${adminListingsHtml}
                         </div>
                     </div>
 
