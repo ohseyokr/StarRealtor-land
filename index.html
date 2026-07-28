@@ -1690,6 +1690,14 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
+        function getValidMeetUrl(meetLink, isSynced) {
+            if (!meetLink || typeof meetLink !== 'string') return 'https://meet.google.com/new';
+            if (!isSynced && (meetLink.includes('abc-defg-hij') || meetLink.includes('lnd-') || !meetLink.startsWith('https://meet.google.com/'))) {
+                return 'https://meet.google.com/new';
+            }
+            return meetLink;
+        }
+
         // Member Dashboard
         async function renderMemberDashboard(container) {
             const res = await fetch('/api/meetings/member', {
@@ -1703,6 +1711,7 @@
             } else {
                 meetings.forEach(m => {
                     const isSynced = m.google_meet_api_synced;
+                    const validMeetLink = getValidMeetUrl(m.meet_link, isSynced);
                     meetingsHtml += `
                         <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
                             <div class="flex justify-between items-start">
@@ -1724,7 +1733,7 @@
                                     <p class="text-[#3A5A40] text-[11px]">담당 중개보조원: ${m.assistant_nickname} (${m.assistant_phone})</p>
                                 </div>
                                 <div class="flex flex-col items-end space-y-1">
-                                    <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition shadow-sm">
+                                    <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-3 py-1.5 text-[11px] uppercase tracking-wider flex items-center gap-1 transition shadow-sm">
                                         <i class="fa-solid fa-video"></i> Google Meet 입장
                                     </a>
                                     ${m.status !== 'CANCELLED_REFUNDED' ? `
@@ -1779,6 +1788,7 @@
                 meetsHtml = `<p class="text-xs text-black/40 py-4">배정된 미팅 일정이 없습니다.</p>`;
             } else {
                 meetings.forEach(m => {
+                    const validMeetLink = getValidMeetUrl(m.meet_link, m.google_meet_api_synced);
                     meetsHtml += `
                         <div class="p-4 bg-[#F5F2ED] border border-black/10 space-y-2 text-xs">
                             <div class="flex justify-between items-center">
@@ -1805,7 +1815,7 @@
                                 <button onclick="regenerateStaffGoogleMeet('${m.meeting_id}')" class="text-[#3A5A40] hover:underline font-bold text-[11px] flex items-center gap-1">
                                     <i class="fa-solid fa-arrows-rotate"></i> Google Meet API 일정/링크 갱신
                                 </button>
-                                <a href="${m.meet_link}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-3 py-1.5 text-[11px] font-bold uppercase transition flex items-center gap-1">
+                                <a href="${validMeetLink}" target="_blank" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-3 py-1.5 text-[11px] font-bold uppercase transition flex items-center gap-1">
                                     <i class="fa-solid fa-video"></i> Meet 주재하기
                                 </a>
                             </div>
