@@ -2259,7 +2259,12 @@ ${apisListStr}
             if (addr.includes('포천') && addr.includes('가양')) return { lat: 37.9823, lng: 127.1845 };
             if (addr.includes('포천') && addr.includes('마명')) return { lat: 37.7923, lng: 127.2456 };
             if (addr.includes('양주')) return { lat: 37.8212, lng: 127.0612 };
-            if (addr.includes('고양') || addr.includes('행주')) return { lat: 37.5985, lng: 126.8205 };
+            if (addr.includes('현천')) return { lat: 37.5954, lng: 126.8321 };
+            if (addr.includes('행주외')) return { lat: 37.5985, lng: 126.8205 };
+            if (addr.includes('행주내')) return { lat: 37.6012, lng: 126.8212 };
+            if (addr.includes('덕은')) return { lat: 37.5812, lng: 126.8412 };
+            if (addr.includes('화전')) return { lat: 37.6102, lng: 126.8482 };
+            if (addr.includes('고양')) return { lat: 37.5954, lng: 126.8321 };
             if (addr.includes('서초') || addr.includes('내곡')) return { lat: 37.4582, lng: 127.0512 };
             if (addr.includes('마포') || addr.includes('상암')) return { lat: 37.5781, lng: 126.8912 };
             if (addr.includes('김포') || addr.includes('고촌')) return { lat: 37.6012, lng: 126.7612 };
@@ -2723,6 +2728,9 @@ ${apisListStr}
                     else if (query.includes('용인')) { targetLat = 37.2348; targetLng = 127.2891; }
                     else if (query.includes('포천')) { targetLat = 37.9823; targetLng = 127.1845; }
                     else if (query.includes('양주')) { targetLat = 37.8212; targetLng = 127.0612; }
+                    else if (query.includes('현천')) { targetLat = 37.5954; targetLng = 126.8321; }
+                    else if (query.includes('행주외')) { targetLat = 37.5985; targetLng = 126.8205; }
+                    else if (query.includes('고양')) { targetLat = 37.5954; targetLng = 126.8321; }
                 }
 
                 if (!isPointInKorea(targetLat, targetLng)) {
