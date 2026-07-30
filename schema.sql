@@ -173,7 +173,7 @@ CREATE INDEX IF NOT EXISTS idx_vworld_log_user ON TB_VWORLD_API_LOG(user_id);
 
 -- 1. Default Owner Config
 INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email, vworld_api_key)
-VALUES ('cfg-1', '스타공인중개사사무소', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr', 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3')
+VALUES ('cfg-1', '한국지역개발토지분석원', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr', 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3')
 ON CONFLICT (config_id) DO NOTHING;
 
 -- 2. Seed Users (Disabled)
