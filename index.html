@@ -413,7 +413,7 @@
                 <div>
                     <p class="text-[10px] font-bold uppercase tracking-[0.2em] mb-2 text-white/40">Ownership</p>
                     <div class="font-serif italic text-white text-base mb-1" id="footer-office-name">한국지역개발토지분석원</div>
-                    <div class="text-white/80">학회토지분석원 책임자: <span class="text-white" id="footer-owner-name">홍길동</span></div>
+                    <div class="text-white/80">정보 책임자: <span class="text-white" id="footer-owner-name">홍길동</span></div>
                     <div class="text-white/60 text-[11px] mt-1 leading-relaxed">사업장: <span id="footer-address">서울특별시 서초구 반포대로 100, 4층</span></div>
                 </div>
                 <div>
@@ -433,7 +433,7 @@
                         <i class="fa-solid fa-gavel text-[#3A5A40]"></i> 
                     </p>
                     <p class="text-white/50 text-[10px] leading-relaxed">
-                        본 플랫폼의 모든 정보 명세는 학회토지분석원의 법적 의무 공시 항목을 동적으로 준수합니다.
+                        본 플랫폼의 모든 정보 명세는 한국지역개발토지분석원의 법적 의무 공시 항목을 동적으로 준수합니다.
                     </p>
                 </div>
             </div>
@@ -536,7 +536,7 @@
                     <select id="signup-role" class="w-full bg-white border border-black/15 p-2.5 text-[#3A5A40] font-bold focus:outline-none">
                         <option value="MEMBER">회원 (Member) - 대상 토지 검색 및 미팅 결제</option>
                         <option value="STAFF">조사연구원 (Staff) - 대상 토지 수집 등록 및 미팅 주재</option>
-                        <option value="OWNER">학회토지분석원 (Owner) - 사무소 전체 감독 및 종합 관리</option>
+                        <option value="OWNER">한국지역개발토지분석원 (Owner) - 사무소 전체 감독 및 종합 관리</option>
                     </select>
                 </div>
 
@@ -600,7 +600,7 @@
                     <i class="fa-solid fa-triangle-exclamation text-[#3A5A40]"></i> 법적 필수 고지 사항
                 </div>
                 <p class="text-[11px] text-black/70 leading-relaxed">
-                    본 상담 및 현장 안내를 진행하는 담당 직원은 학회토지분석원가 아닌 <strong>한국지역개발토지분석원 소속 조사연구원(Staff)</strong>입니다.
+                    본 상담 및 현장 안내를 진행하는 담당 직원은 <strong>한국지역개발토지분석원 소속 조사연구원(Staff)</strong>입니다.
                 </p>
                 <label class="flex items-center space-x-2 pt-1 cursor-pointer">
                     <input type="checkbox" id="legal-staff-consent" required class="w-4 h-4 border-black/20 text-[#3A5A40] focus:ring-0">
@@ -866,7 +866,7 @@
                     <select id="edit-user-role" class="w-full bg-white border border-black/15 p-2 text-[#3A5A40] font-bold focus:outline-none focus:border-[#3A5A40]">
                         <option value="MEMBER">MEMBER (일반 회원)</option>
                         <option value="STAFF">STAFF (조사연구원)</option>
-                        <option value="OWNER">OWNER (학회토지분석원)</option>
+                        <option value="OWNER">OWNER (한국지역개발토지분석원)</option>
                         <option value="ADMIN">ADMIN (최고 관리자)</option>
                     </select>
                 </div>
@@ -992,7 +992,7 @@
                 const roleLabels = {
                     MEMBER: '회원 (Member)',
                     STAFF: '조사연구원 (Staff)',
-                    OWNER: '학회토지분석원 (Owner)',
+                    OWNER: '한국지역개발토지분석원 (Owner)',
                     ADMIN: '웹서버관리자 (Admin)'
                 };
 
@@ -2242,7 +2242,7 @@ ${apisListStr}
                 title.innerText = '조사연구원(Staff) 전용 대시보드';
                 await renderStaffDashboard(content);
             } else if (currentUser.role === 'OWNER') {
-                title.innerText = '학회토지분석원(Owner) 통합 포털';
+                title.innerText = '한국지역개발토지분석원(Owner) 통합 포털';
                 await renderOwnerDashboard(content);
             } else if (currentUser.role === 'ADMIN') {
                 title.innerText = '웹서버 관리자(Admin) 콘솔';
@@ -2336,7 +2336,7 @@ ${apisListStr}
         }
 
         async function staffForwardRefundToOwner(meetingId) {
-            if (!confirm('회원의 취소 요청 건에 대해 학회토지분석원(Owner)에게 \'취소승인환불요청\'을 전송하시겠습니까?')) return;
+            if (!confirm('회원의 취소 요청 건에 대해 한국지역개발토지분석원(Owner)에게 \'취소승인환불요청\'을 전송하시겠습니까?')) return;
             try {
                 const res = await fetch(`/api/meetings/${meetingId}/staff-request-refund`, {
                     method: 'POST',
@@ -3337,7 +3337,7 @@ ${apisListStr}
                         <!-- Owner Legal Metadata Config Editor -->
                         <div class="lg:col-span-6 bg-white p-6 border border-black/10 space-y-4 shadow-sm">
                             <h3 class="font-serif italic text-[#1A1A1A] text-base flex items-center gap-2">
-                                <i class="fa-solid fa-sliders text-[#3A5A40]"></i> 학회토지분석원 법적 공시 메타데이터 설정 (Admin)
+                                <i class="fa-solid fa-sliders text-[#3A5A40]"></i> 한국지역개발토지분석원 법적 공시 메타데이터 설정 (Admin)
                             </h3>
                             <form onsubmit="handleSaveOwnerConfig(event)" class="space-y-3 text-xs">
                                 <div class="grid grid-cols-2 gap-2">
@@ -3537,7 +3537,7 @@ ${apisListStr}
                 const data = await res.json();
                 ownerConfig = data.config;
                 updateLegalHeaderFooterUI(ownerConfig);
-                alert('학회토지분석원 메타데이터가 플랫폼 전역 Header 및 Footer에 실시간으로 업데이트 되었습니다!');
+                alert('한국지역개발토지분석원 메타데이터가 플랫폼 전역 Header 및 Footer에 실시간으로 업데이트 되었습니다!');
             } catch (err) {
                 alert('저장 실패');
             }
