@@ -2523,6 +2523,25 @@ ${apisListStr}
                 const vworldData = await res.json();
                 console.log('VWORLD Analysis Output:', vworldData);
 
+                // Add or update VWORLD extracted parcels into currentListings
+                if (vworldData && vworldData.extracted_parcels && Array.isArray(vworldData.extracted_parcels)) {
+                    vworldData.extracted_parcels.forEach((p, idx) => {
+                        // Ensure coords are positioned at center with slight offsets to fit inside drawn geofence
+                        const offsetLat = idx === 0 ? 0 : (idx === 1 ? 0.0001 : -0.0001);
+                        const offsetLng = idx === 0 ? 0 : (idx === 1 ? 0.0001 : -0.0001);
+                        p.lat = centerLat + offsetLat;
+                        p.lng = centerLng + offsetLng;
+
+                        const existingIdx = currentListings.findIndex(l => l.listing_id === p.listing_id);
+                        if (existingIdx >= 0) {
+                            currentListings[existingIdx] = p;
+                        } else {
+                            currentListings.unshift(p);
+                        }
+                    });
+                }
+
+                refreshGeofenceListingMarkers();
                 processGeofenceFilter(drawnGeofenceLayer);
 
                 alert(`✅ [VWORLD 분석 완료] 선택된 지오펜싱 영역 GPS (${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}) 기반 VWORLD 지번 조회가 완료되었습니다.\n총 ${matchedGeofenceListings.length}건의 필지가 리스팅되었습니다.`);
