@@ -2794,12 +2794,22 @@ ${apisListStr}
         }
 
         async function addToCartDirect(listingId, silent = false) {
+            const listingObj = currentListings.find(l => l.listing_id === listingId) || 
+                               matchedGeofenceListings.find(l => l.listing_id === listingId);
+
             if (!currentUser) {
                 let guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
                 if (!guestCart.includes(listingId)) {
                     guestCart.push(listingId);
                     localStorage.setItem('guest_cart_listings', JSON.stringify(guestCart));
                 }
+                
+                let guestItems = JSON.parse(localStorage.getItem('guest_cart_items') || '[]');
+                if (listingObj && !guestItems.some(i => i.listing_id === listingId)) {
+                    guestItems.push(listingObj);
+                    localStorage.setItem('guest_cart_items', JSON.stringify(guestItems));
+                }
+
                 if (!silent) {
                     alert('🛒 비회원 관심 카트에 담겼습니다. (상단 Cart에서 확인 및 로그인 시 통합)');
                 }
@@ -2814,7 +2824,7 @@ ${apisListStr}
                         'Content-Type': 'application/json',
                         'Authorization': `Bearer ${currentUser.token}`
                     },
-                    body: JSON.stringify({ listing_id: listingId })
+                    body: JSON.stringify({ listing_id: listingId, item: listingObj })
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || '담기 실패');
@@ -2869,7 +2879,12 @@ ${apisListStr}
                 }
             } else {
                 const guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
-                cartListings = currentListings.filter(l => guestCart.includes(l.listing_id)).map(l => ({ listing: l, cart_id: `guest-${l.listing_id}` }));
+                const guestItems = JSON.parse(localStorage.getItem('guest_cart_items') || '[]');
+                const allListingsMap = new Map();
+                currentListings.forEach(l => allListingsMap.set(l.listing_id, l));
+                guestItems.forEach(l => { if (l && l.listing_id) allListingsMap.set(l.listing_id, l); });
+                const allListings = Array.from(allListingsMap.values());
+                cartListings = allListings.filter(l => guestCart.includes(l.listing_id)).map(l => ({ listing: l, cart_id: `guest-${l.listing_id}` }));
             }
 
             const list = document.getElementById('cart-items-list');
