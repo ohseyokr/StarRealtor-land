@@ -2690,6 +2690,54 @@ ${apisListStr}
             }
         }
 
+        function ensureFormattedParcel(l) {
+            if (!l) return l;
+            let title = l.title || '';
+            let address = l.address || '';
+            let jimok = l.jimok_official || '대';
+            let area = Number(l.area_sqm) || 500;
+            const formattedArea = area.toLocaleString();
+
+            if (title.includes('대한민국 필지 GPS') || address.includes('대한민국 필지 GPS') || (l.is_vworld_extracted && !title.startsWith('('))) {
+                let lat = Number(l.lat) || 37.5665;
+                let lng = Number(l.lng) || 126.9780;
+                let sojaeji = l.sojaeji || '';
+                let jibeon = l.jibeon || '';
+
+                if (!sojaeji) {
+                    if (lat >= 37.30 && lat <= 37.80 && lng >= 128.30 && lng <= 128.90) {
+                        sojaeji = '강원특별자치도 평창군 대관령면 수하리';
+                        jibeon = '산 45-2번지';
+                    } else if (lat >= 36.50 && lat <= 37.10 && lng >= 126.30 && lng <= 126.90) {
+                        sojaeji = '충청남도 당진시 신평면 금천리';
+                        jibeon = '123-5번지';
+                    } else if (lat >= 37.75 && lat <= 38.20 && lng >= 127.00 && lng <= 127.35) {
+                        sojaeji = '경기도 포천시 창수면 가양리';
+                        jibeon = '369-6번지';
+                    } else {
+                        sojaeji = '경기도 고양시 덕양구 행주외동';
+                        jibeon = '128번지';
+                    }
+                }
+
+                if (!jibeon) {
+                    const match = title.match(/(산\s*\d+-\d+번지|\d+-\d+번지|산\s*\d+번지|\d+번지|\d+-\d+|\d+)/);
+                    jibeon = match ? match[0] : '128번지';
+                    if (!jibeon.endsWith('번지')) jibeon += '번지';
+                }
+
+                address = `${sojaeji} ${jibeon}`.trim();
+                title = `(${jimok}) (${formattedArea}㎡) ${sojaeji} ${jibeon}`.trim();
+
+                l.title = title;
+                l.address = address;
+                l.sojaeji = sojaeji;
+                l.jibeon = jibeon;
+            }
+
+            return l;
+        }
+
         function renderGeofenceMatchedResults(matchedList) {
             const container = document.getElementById('geofence-results-container');
             const countBadge = document.getElementById('geofence-matched-count');
@@ -2716,7 +2764,8 @@ ${apisListStr}
             if (selectedBtn) selectedBtn.disabled = false;
 
             let html = '';
-            matchedList.forEach(item => {
+            matchedList.forEach(rawItem => {
+                const item = ensureFormattedParcel(rawItem);
                 html += `
                     <div class="bg-white p-3 border border-black/10 shadow-2xs space-y-2 hover:border-[#3A5A40] transition">
                         <div class="flex items-start justify-between gap-2">
@@ -2731,7 +2780,7 @@ ${apisListStr}
                         </div>
                         <p class="text-[11px] text-black/60 truncate pl-6">${item.address}</p>
                         <div class="flex justify-between items-center text-[10px] text-black/50 pt-1 border-t border-black/5">
-                            <span class="pl-6">면적: ${item.area_sqm}㎡</span>
+                            <span class="pl-6">면적: ${item.area_sqm.toLocaleString()}㎡</span>
                             <button onclick="addToCartDirect('${item.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-2.5 py-1 rounded transition flex items-center gap-1 shadow-2xs">
                                 <i class="fa-solid fa-cart-plus"></i> 카드에 담기
                             </button>
@@ -2895,12 +2944,12 @@ ${apisListStr}
                 list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 토지가 없습니다.</p>`;
             } else {
                 cartListings.forEach(c => {
-                    const l = c.listing;
+                    const l = ensureFormattedParcel(c.listing);
                     list.innerHTML += `
                         <div class="p-3 bg-[#F5F2ED] border border-black/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                             <div class="space-y-1">
                                 <div class="font-serif italic text-sm text-[#1A1A1A]">${l.title}</div>
-                                <div class="text-[11px] text-black/50">${l.address} (지목: ${l.jimok_official})</div>
+                                <div class="text-[11px] text-black/50">${l.address} (지목: ${l.jimok_official}, 면적: ${l.area_sqm.toLocaleString()}㎡)</div>
                                 <div class="text-xs text-[#3A5A40] font-serif font-bold">${(l.price / 100000000).toFixed(1)} 억원</div>
                             </div>
                             <div class="flex flex-wrap items-center gap-1.5">
@@ -3408,13 +3457,14 @@ ${apisListStr}
                             </thead>
                             <tbody>
                 `;
-                selectedListings.forEach(l => {
+                selectedListings.forEach(rawL => {
+                    const l = ensureFormattedParcel(rawL);
                     listingsHtml += `
                         <tr class="border-b border-black/5 text-[#1A1A1A] text-xs hover:bg-[#F5F2ED]">
                             <td class="p-2 font-bold">${l.title}</td>
                             <td class="p-2 text-black/70 text-[11px]">${l.address || ''}</td>
                             <td class="p-2 font-semibold text-[#3A5A40]">${l.jimok_official || '대'}</td>
-                            <td class="p-2 text-[11px]">${l.area_sqm || 0}㎡</td>
+                            <td class="p-2 text-[11px]">${(Number(l.area_sqm) || 0).toLocaleString()}㎡</td>
                             <td class="p-2 font-bold text-[#3A5A40]">${l.price_display || ''}</td>
                             <td class="p-2 text-right">
                                 <button onclick="openVworldMypageModal('${l.address || ''}', '${l.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-2 py-1 text-[10px] rounded transition shadow-2xs mr-1">
