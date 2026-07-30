@@ -390,21 +390,30 @@ app.get('/api/config', async (req, res) => {
   res.json(inMemoryDB.config);
 });
 
-// Update Owner Legal Metadata Config (Admin Only)
+// Update Owner Legal Metadata Config (Admin / Owner)
 app.put('/api/config', authenticateToken, async (req, res) => {
-  if (req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '관리자(Admin) 권한이 필요합니다.' });
+  if (req.user.role !== 'ADMIN' && req.user.role !== 'OWNER') {
+    return res.status(403).json({ error: '관리자(Admin) 또는 한국지역개발토지분석원(Owner) 권한이 필요합니다.' });
   }
   const { office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email } = req.body;
 
-  if (usePg) {
+  if (usePg && pool) {
     try {
-      await pool.query(
-        `UPDATE TB_OWNER_CONFIG SET 
-          office_name = $1, owner_name = $2, address = $3, business_reg_num = $4, 
-          license_num = $5, mobile_phone = $6, landline_phone = $7, fax_num = $8, email = $9, updated_at = NOW()`,
-        [office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email]
-      );
+      const check = await pool.query('SELECT COUNT(*) FROM TB_OWNER_CONFIG');
+      if (parseInt(check.rows[0].count) === 0) {
+        await pool.query(
+          `INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email)
+           VALUES ('cfg-1', $1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email]
+        );
+      } else {
+        await pool.query(
+          `UPDATE TB_OWNER_CONFIG SET 
+            office_name = $1, owner_name = $2, address = $3, business_reg_num = $4, 
+            license_num = $5, mobile_phone = $6, landline_phone = $7, fax_num = $8, email = $9, updated_at = NOW()`,
+          [office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email]
+        );
+      }
     } catch (e) {
       console.error('DB update error on config:', e);
     }
