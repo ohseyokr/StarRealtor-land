@@ -1643,7 +1643,7 @@
                                 </div>
                                 <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'cadastral')" 
                                      class="relative h-52 bg-stone-900 border border-amber-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-amber-400 transition-all flex items-center justify-center">
-                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="[도면1] 연속지적도" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
+                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="[도면1] 연속지적도" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null;">
                                     
                                     <!-- Hover overlay to prompt popup opening -->
                                     <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
@@ -1672,7 +1672,7 @@
                                 </div>
                                 <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'satellite')" 
                                      class="relative h-52 bg-stone-900 border border-emerald-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-emerald-400 transition-all flex items-center justify-center">
-                                    <img src="${docs[1]?.url || data.map_images.satellite_map_url}" alt="[도면2] 위성사진" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.satellite_map_url}';">
+                                    <img src="${docs[1]?.url || data.map_images.satellite_map_url}" alt="[도면2] 위성사진" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null;">
                                     
                                     <!-- Hover overlay to prompt popup opening -->
                                     <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
@@ -1701,7 +1701,7 @@
                                 </div>
                                 <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'wms')" 
                                      class="relative h-52 bg-stone-900 border border-blue-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-blue-400 transition-all flex items-center justify-center">
-                                    <img src="${docs[2]?.url || data.map_images.land_use_plan_url}" alt="[도면3] WMS Direct Endpoint" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.land_use_plan_url}';">
+                                    <img src="${docs[2]?.url || data.map_images.land_use_plan_url}" alt="[도면3] WMS Direct Endpoint" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null;">
                                     
                                     <!-- Hover overlay to prompt popup opening -->
                                     <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
@@ -1781,12 +1781,15 @@
             const cleanAddr = (address || '강원특별자치도 평창군 대관령면 수하리 산 45-2').trim();
             const encodedAddress = encodeURIComponent(cleanAddr);
             
-            // Construct VWORLD official web page URL with location search / map mode
-            let targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}`;
+            const links = currentVworldReportData?.vworld_official_links || {};
+            
+            let targetUrl = links.vworld_wms_cadastral;
             if (mapType === 'satellite') {
-                targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}&mode=satellite`;
+                targetUrl = links.vworld_wms_satellite || `https://map.kakao.com/?q=${encodedAddress}`;
             } else if (mapType === 'wms') {
-                targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}&pnu=${pnu || ''}`;
+                targetUrl = links.vworld_wms_landuse || links.eum_land_info || `https://www.eum.go.kr/web/ar/lu/luLandDet.do?isvel=Y&selType=address&pnu=${pnu || ''}`;
+            } else {
+                targetUrl = links.vworld_wms_cadastral || links.eum_land_info || `https://map.vworld.kr/map/maps.do`;
             }
 
             const width = 1280;
