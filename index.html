@@ -321,7 +321,7 @@
                             </span>
                         </div>
                         <div class="h-72 overflow-hidden bg-black/50">
-                            <iframe id="detail-youtube-iframe" class="w-full h-full" src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+                            <iframe id="detail-youtube-iframe" class="w-full h-full" src="https://www.youtube.com/embed/5dkJswCyOtg" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
                         </div>
                     </div>
                 </div>
@@ -739,7 +739,7 @@
 
                 <div>
                     <label class="block text-black/60 mb-1">YouTube 영상 Embed URL</label>
-                    <input type="text" id="new-youtube" value="https://www.youtube.com/embed/dQw4w9WgXcQ" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    <input type="text" id="new-youtube" value="https://www.youtube.com/embed/5dkJswCyOtg" class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
                 </div>
 
                 <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition mt-2">
@@ -1331,7 +1331,7 @@
             document.getElementById('detail-area').innerText = `${listing.area_sqm} ㎡ (약 ${(listing.area_sqm / 3.3058).toFixed(0)}평)`;
             document.getElementById('detail-zoning').innerText = listing.zoning_district;
             document.getElementById('detail-road').innerText = listing.road_access;
-            document.getElementById('detail-youtube-iframe').src = listing.youtube_url || "https://www.youtube.com/embed/dQw4w9WgXcQ";
+            document.getElementById('detail-youtube-iframe').src = listing.youtube_url || "https://www.youtube.com/embed/5dkJswCyOtg";
 
             // Security Check for Public Records PDF Viewer
             const guestNotice = document.getElementById('pdf-guest-lock-notice');
