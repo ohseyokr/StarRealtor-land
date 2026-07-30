@@ -158,15 +158,15 @@ CREATE TABLE TB_AUDIT_LOG (
 -- ====================================================================
 -- INDEXES FOR PERFORMANCE
 -- ====================================================================
-CREATE INDEX idx_user_email ON TB_USER(email);
-CREATE INDEX idx_user_role ON TB_USER(role);
-CREATE INDEX idx_listing_jimok ON TB_LAND_LISTING(jimok_official);
-CREATE INDEX idx_listing_status ON TB_LAND_LISTING(listing_status);
-CREATE INDEX idx_listing_approval ON TB_LAND_LISTING(approval_status);
-CREATE INDEX idx_cart_member ON TB_CART(member_id);
-CREATE INDEX idx_meet_member ON TB_MEET_SCHEDULE(member_id);
-CREATE INDEX idx_meet_assistant ON TB_MEET_SCHEDULE(assistant_id);
-CREATE INDEX idx_vworld_log_user ON TB_VWORLD_API_LOG(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_email ON TB_USER(email);
+CREATE INDEX IF NOT EXISTS idx_user_role ON TB_USER(role);
+CREATE INDEX IF NOT EXISTS idx_listing_jimok ON TB_LAND_LISTING(jimok_official);
+CREATE INDEX IF NOT EXISTS idx_listing_status ON TB_LAND_LISTING(listing_status);
+CREATE INDEX IF NOT EXISTS idx_listing_approval ON TB_LAND_LISTING(approval_status);
+CREATE INDEX IF NOT EXISTS idx_cart_member ON TB_CART(member_id);
+CREATE INDEX IF NOT EXISTS idx_meet_member ON TB_MEET_SCHEDULE(member_id);
+CREATE INDEX IF NOT EXISTS idx_meet_assistant ON TB_MEET_SCHEDULE(assistant_id);
+CREATE INDEX IF NOT EXISTS idx_vworld_log_user ON TB_VWORLD_API_LOG(user_id);
 
 -- ====================================================================
 -- INITIAL SEED DATA
