@@ -294,6 +294,31 @@ const inMemoryDB = {
       approval_status: 'APPROVED',
       approval_requests: [],
       created_at: new Date().toISOString()
+    },
+    {
+      listing_id: 'lnd-107',
+      assistant_id: 'u-staff-1',
+      assistant_nickname: '토지조사원',
+      title: '(잡종지) (1,100㎡) 경기도 고양시 덕양구 행주외동 129-1번지',
+      address: '경기도 고양시 덕양구 행주외동 129-1번지',
+      sojaeji: '경기도 고양시 덕양구 행주외동',
+      jibeon: '129-1번지',
+      lat: 37.5985,
+      lng: 126.8205,
+      jimok_official: '잡종지',
+      area_sqm: 1100,
+      price: 450000000,
+      official_land_price_sqm: 125000,
+      zoning_district: '계획관리지역',
+      road_access: '소로2류(폭 8m~10m) 포장도로 접함',
+      youtube_url: 'https://www.youtube.com/embed/5dkJswCyOtg',
+      doc_luris_pdf_url: '/sample-luris.pdf',
+      doc_ledger_pdf_url: '/sample-ledger.pdf',
+      doc_cadastral_pdf_url: '/sample-cadastral.pdf',
+      listing_status: 'ACTIVE',
+      approval_status: 'APPROVED',
+      approval_requests: [],
+      created_at: new Date().toISOString()
     }
   ],
   carts: [
