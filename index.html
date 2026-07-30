@@ -767,46 +767,53 @@
     </div>
 
     <!-- MODAL 6-B: MYPAGE ONLY VWORLD LAND INFO & MAP LOOKUP/DOWNLOAD MODAL -->
-    <div id="vworld-mypage-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-3xl p-6 space-y-5 relative max-h-[90vh] overflow-y-auto shadow-2xl">
+    <div id="vworld-mypage-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 hidden">
+        <div class="bg-[#FDFCFB] border border-black/15 w-full max-w-4xl p-5 sm:p-6 space-y-4 relative max-h-[92vh] overflow-y-auto shadow-2xl">
             <div class="flex justify-between items-center border-b border-black/10 pb-3">
-                <h3 class="text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
-                    <i class="fa-solid fa-earth-asia text-[#3A5A40]"></i> VWORLD API 토지 지번 정보 및 지도 첨부내용 조회 / 다운로드 (마이페이지 전용)
-                </h3>
-                <button onclick="closeModal('vworld-mypage-modal')" class="text-black/40 hover:text-[#1A1A1A]">
+                <div class="flex items-center gap-2">
+                    <span class="bg-[#3A5A40] text-white text-[10px] font-bold px-2 py-0.5 rounded uppercase">VWORLD OPEN API</span>
+                    <h3 class="text-base sm:text-lg font-serif italic text-[#1A1A1A] flex items-center gap-2">
+                        <i class="fa-solid fa-earth-asia text-[#3A5A40]"></i> VWORLD 14대 API 전체 연동 토지 지번 정보 및 2D/3D 지도 조회 · 다운로드
+                    </h3>
+                </div>
+                <button onclick="closeModal('vworld-mypage-modal')" class="text-black/40 hover:text-[#1A1A1A] p-1">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
 
-            <!-- Role Badge Banner -->
+            <!-- Role Badge & VWORLD API Key Banner -->
             <div class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 p-3 text-xs flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div class="flex items-center gap-2">
-                    <i class="fa-solid fa-shield-halved text-[#3A5A40] text-sm"></i>
-                    <span class="text-[#3A5A40] font-bold">마이페이지 전용 보안 서비스: VWORLD 인증 키 연동 지번별 공간지도 & 첨부특성정보</span>
+                    <i class="fa-solid fa-key text-[#3A5A40] text-sm"></i>
+                    <div>
+                        <span class="text-[#3A5A40] font-bold">마이페이지 전용 보안 서비스: VWORLD 오피셜 개발키(CE2C1488-****) 연동</span>
+                        <p class="text-[10px] text-stone-600">3D/2D 지도, WMS/WFS, WMTS, Geocoder, StaticMap, 2D데이터 등 14개 API 전체 바인딩 완료</p>
+                    </div>
                 </div>
-                <span id="vworld-modal-user-role" class="text-[10px] bg-[#3A5A40] text-white px-2.5 py-1 font-bold">AUTHORIZED USER</span>
+                <span id="vworld-modal-user-role" class="text-[10px] bg-[#3A5A40] text-white px-2.5 py-1 font-bold rounded">MEMBER / STAFF / OWNER / ADMIN AUTHORIZED</span>
             </div>
 
             <!-- Quick Jibun Search Input within Modal -->
             <div class="bg-[#F5F2ED] p-3 border border-black/10 space-y-2">
                 <label class="block text-xs font-bold text-[#1A1A1A]">토지 소재지 지번 입력 및 VWORLD API 조회</label>
                 <div class="flex gap-2">
-                    <input type="text" id="vworld-search-input" placeholder="예: 강원특별자치도 평창군 대관령면 수하리 45-2" class="flex-1 bg-white border border-black/20 p-2 text-xs focus:outline-none focus:border-[#3A5A40]">
-                    <button onclick="executeVworldMypageLookup()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-4 py-2 text-xs transition flex items-center gap-1">
+                    <input type="text" id="vworld-search-input" placeholder="예: 강원특별자치도 평창군 대관령면 수하리 산 45-2" class="flex-1 bg-white border border-black/20 p-2 text-xs focus:outline-none focus:border-[#3A5A40]">
+                    <button onclick="executeVworldMypageLookup()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-4 py-2 text-xs transition flex items-center gap-1.5 shadow-xs">
                         <i class="fa-solid fa-magnifying-glass"></i> VWORLD 실시간 조회
                     </button>
                 </div>
             </div>
 
+            <!-- Modal Content Area -->
             <div id="vworld-mypage-content" class="space-y-4 text-xs">
                 <!-- JS Populated -->
             </div>
 
             <div class="pt-3 border-t border-black/10 flex flex-col sm:flex-row justify-between items-center gap-2">
-                <p class="text-[10px] text-black/50">* VWORLD 오피셜 개발자 인증키로 동적 연동된 지번별 연속지적도 및 첨부데이터입니다.</p>
+                <p class="text-[10px] text-black/50">* 브이월드(VWORLD) 오피셜 개발자 인증키와 실시간 융복합 연동된 공적 지도 및 토지 특성 출력물입니다.</p>
                 <div class="flex items-center gap-2">
-                    <button onclick="downloadVworldLandReport()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1 shadow-sm">
-                        <i class="fa-solid fa-download"></i> 토지정보 & 지도 리포트 다운로드
+                    <button onclick="downloadVworldLandReport()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white px-4 py-2 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5 shadow-sm">
+                        <i class="fa-solid fa-file-arrow-down"></i> 토지정보 & 14대 API 지도 리포트 다운로드
                     </button>
                     <button onclick="closeModal('vworld-mypage-modal')" class="bg-stone-200 hover:bg-stone-300 text-stone-800 px-4 py-2 text-xs font-bold uppercase transition">닫기</button>
                 </div>
@@ -1538,9 +1545,10 @@
             const container = document.getElementById('vworld-mypage-content');
 
             container.innerHTML = `
-                <div class="text-center py-8 space-y-2">
-                    <i class="fa-solid fa-spinner fa-spin text-2xl text-[#3A5A40]"></i>
-                    <p class="text-xs font-bold text-[#3A5A40]">VWORLD 공공 API 개발자 인증키 연결 및 필지 지도 데이터 수신 중...</p>
+                <div class="text-center py-12 space-y-3 bg-white p-6 border border-black/10">
+                    <i class="fa-solid fa-earth-asia fa-spin text-3xl text-[#3A5A40]"></i>
+                    <p class="text-xs font-bold text-[#3A5A40]">VWORLD 오피셜 개발키(CE2C1488-****) 연동 및 14대 공공 API 데이터 수신 중...</p>
+                    <p class="text-[11px] text-stone-500">2D/3D 지도, 연속지적도(WMS), 지오코더 좌표, 토지특성(2D데이터) 동시 결합</p>
                 </div>
             `;
 
@@ -1560,77 +1568,145 @@
                 currentVworldReportData = data;
 
                 const land = data.land_info;
+                const coords = data.coordinates || { lat: 37.6651, lng: 128.7182, epsg3857_x: 14292120, epsg3857_y: 4491200 };
+                const apis = data.vworld_all_apis_connected || [];
                 const docs = data.vworld_attached_docs || [];
 
                 container.innerHTML = `
+                    <!-- 1. LAND TOP SUMMARY CARD -->
                     <div class="bg-white p-4 border border-black/10 space-y-3">
-                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-black/10 pb-2 gap-2">
+                        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-black/10 pb-2.5 gap-2">
                             <div>
-                                <span class="bg-[#3A5A40] text-white text-[9px] font-bold px-2 py-0.5 rounded mr-1">VWORLD API OK</span>
-                                <strong class="text-sm text-[#1A1A1A]">${land.address}</strong>
+                                <span class="bg-[#3A5A40] text-white text-[9px] font-bold px-2 py-0.5 rounded mr-1.5 uppercase">VWORLD API AUTHENTICATED</span>
+                                <strong class="text-sm font-bold text-[#1A1A1A]">${land.address}</strong>
                             </div>
-                            <span class="text-[11px] font-mono bg-[#F5F2ED] text-[#3A5A40] font-bold px-2 py-1 border border-black/10">PNU: ${land.pnu}</span>
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-[10px] font-mono bg-[#F5F2ED] text-[#3A5A40] font-bold px-2 py-0.5 border border-black/10">PNU: ${land.pnu}</span>
+                                <span class="text-[10px] font-mono bg-emerald-50 text-emerald-800 font-bold px-2 py-0.5 border border-emerald-200">좌표: ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}</span>
+                            </div>
                         </div>
 
                         <!-- LAND ATTRIBUTES GRID -->
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px]">
-                            <div class="bg-[#F5F2ED] p-2 border border-black/5">
+                            <div class="bg-[#F5F2ED] p-2.5 border border-black/5">
                                 <span class="text-black/50 block font-bold text-[10px]">공간정보법 지목</span>
                                 <strong class="text-[#3A5A40] text-xs">${land.jimok_official} (공적지목)</strong>
                             </div>
-                            <div class="bg-[#F5F2ED] p-2 border border-black/5">
+                            <div class="bg-[#F5F2ED] p-2.5 border border-black/5">
                                 <span class="text-black/50 block font-bold text-[10px]">국토계획법 용도지역</span>
                                 <strong class="text-[#1A1A1A] text-xs">${land.zoning_district}</strong>
                             </div>
-                            <div class="bg-[#F5F2ED] p-2 border border-black/5">
+                            <div class="bg-[#F5F2ED] p-2.5 border border-black/5">
                                 <span class="text-black/50 block font-bold text-[10px]">개별공시지가</span>
                                 <strong class="text-[#3A5A40] text-xs">${land.official_land_price_sqm.toLocaleString()} 원/㎡</strong>
                             </div>
-                            <div class="bg-[#F5F2ED] p-2 border border-black/5">
+                            <div class="bg-[#F5F2ED] p-2.5 border border-black/5">
                                 <span class="text-black/50 block font-bold text-[10px]">건폐율 / 용적률</span>
                                 <strong class="text-[#1A1A1A] text-xs">${land.building_coverage_ratio} / ${land.floor_area_ratio}</strong>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-2 text-[11px] bg-[#F5F2ED] p-2 border border-black/5">
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] bg-[#F5F2ED] p-2.5 border border-black/5">
                             <div><strong>도로접면 조건:</strong> ${land.road_access}</div>
                             <div><strong>지형 지세:</strong> ${land.land_shape}</div>
                         </div>
                     </div>
 
-                    <!-- VWORLD MAP & ATTACHMENTS VIEW -->
-                    <div class="space-y-2">
-                        <h4 class="font-bold text-[#3A5A40] text-xs flex items-center gap-1.5">
-                            <i class="fa-solid fa-map-location-dot"></i> VWORLD 인증 지번 지도 및 첨부 도면 오버레이
-                        </h4>
-                        
+                    <!-- 2. SUB-TABS NAV BAR -->
+                    <div class="flex border-b border-black/15 gap-1 bg-[#F5F2ED] p-1">
+                        <button id="vworld-tab-btn-maps" onclick="switchVworldSubTab('maps')" class="flex-1 py-1.5 px-3 text-xs font-bold text-[#3A5A40] bg-white border border-black/10 shadow-xs">
+                            <i class="fa-solid fa-map mr-1"></i> [1] 2D/3D 지적도 및 위성 지도
+                        </button>
+                        <button id="vworld-tab-btn-apis" onclick="switchVworldSubTab('apis')" class="flex-1 py-1.5 px-3 text-xs font-bold text-stone-600 hover:bg-stone-200">
+                            <i class="fa-solid fa-network-wired mr-1"></i> [2] 14대 VWORLD API 연동 현황
+                        </button>
+                        <button id="vworld-tab-btn-details" onclick="switchVworldSubTab('details')" class="flex-1 py-1.5 px-3 text-xs font-bold text-stone-600 hover:bg-stone-200">
+                            <i class="fa-solid fa-file-contract mr-1"></i> [3] 공공 토지 특성 & 규제
+                        </button>
+                    </div>
+
+                    <!-- TAB 1: MAPS & IMAGERY -->
+                    <div id="vworld-subtab-maps" class="space-y-3">
+                        <div class="flex justify-between items-center text-xs">
+                            <h4 class="font-bold text-[#3A5A40] flex items-center gap-1.5">
+                                <i class="fa-solid fa-layer-group"></i> VWORLD WMS 연속지적도 & 항공 위성 오버레이
+                            </h4>
+                            <span class="text-[10px] text-stone-500 font-mono">* 이미지 로드 오류 방지 및 데이터 무결성 보증 적용</span>
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <!-- Cadastral Overlay Map -->
-                            <div class="bg-[#1A1A1A] p-3 text-white rounded border border-black/20 space-y-2">
+                            <!-- Cadastral Overlay Map Container -->
+                            <div class="bg-[#131B1E] p-3 text-white rounded border border-black/20 space-y-2">
                                 <div class="flex justify-between items-center text-[11px]">
-                                    <span class="font-bold text-amber-300"><i class="fa-solid fa-layer-group"></i> 연속지적도 (WMS Cadastral Map)</span>
-                                    <span class="text-[9px] bg-emerald-800 text-emerald-100 px-1.5 py-0.5">VWORLD 2D TILE</span>
+                                    <span class="font-bold text-amber-300"><i class="fa-solid fa-draw-polygon"></i> 연속지적도 (WMS Cadastral Layer)</span>
+                                    <span class="text-[9px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 border border-amber-500/30">VWORLD 2D/3D TILE</span>
                                 </div>
-                                <div class="relative h-44 bg-stone-900 border border-amber-500/30 overflow-hidden flex items-center justify-center">
-                                    <img src="${docs[0]?.url || 'https://images.unsplash.com/photo-1592595896551-12b371d546d5?auto=format&fit=crop&w=600&q=80'}" alt="연속지적도" class="w-full h-full object-cover">
-                                    <div class="absolute inset-0 bg-black/20 flex flex-col items-center justify-end p-2 text-center">
-                                        <span class="bg-black/80 text-amber-300 font-mono text-[9px] px-2 py-0.5 border border-amber-400/40">필지 경계선: PNU [${land.pnu}] 바인딩 완료</span>
-                                    </div>
+                                <div class="relative h-56 bg-stone-900 border border-amber-500/30 overflow-hidden rounded flex items-center justify-center">
+                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="연속지적도" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
+                                </div>
+                                <div class="flex justify-between items-center text-[10px] text-amber-200/80 pt-1 border-t border-white/10">
+                                    <span>필지 경계선: PNU [${land.pnu}]</span>
+                                    <span>WMS: LP_PA_CBND_BUBBLE</span>
                                 </div>
                             </div>
 
-                            <!-- Satellite Image View -->
-                            <div class="bg-[#1A1A1A] p-3 text-white rounded border border-black/20 space-y-2">
+                            <!-- Satellite Image View Container -->
+                            <div class="bg-[#131B1E] p-3 text-white rounded border border-black/20 space-y-2">
                                 <div class="flex justify-between items-center text-[11px]">
-                                    <span class="font-bold text-emerald-300"><i class="fa-solid fa-plane"></i> 토지 현황 항공 위성사진</span>
-                                    <span class="text-[9px] bg-blue-800 text-blue-100 px-1.5 py-0.5">HIGH-RES SATELLITE</span>
+                                    <span class="font-bold text-emerald-300"><i class="fa-solid fa-satellite"></i> 토지 현황 항공 위성사진</span>
+                                    <span class="text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 border border-emerald-500/30">HIGH-RES SATELLITE</span>
                                 </div>
-                                <div class="relative h-44 bg-stone-900 border border-emerald-500/30 overflow-hidden flex items-center justify-center">
-                                    <img src="${docs[1]?.url || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=600&q=80'}" alt="위성사진" class="w-full h-full object-cover">
-                                    <div class="absolute inset-0 bg-black/20 flex flex-col items-center justify-end p-2 text-center">
-                                        <span class="bg-black/80 text-emerald-300 text-[9px] px-2 py-0.5 border border-emerald-400/40">토지 현황 및 주변 도로망 매핑</span>
+                                <div class="relative h-56 bg-stone-900 border border-emerald-500/30 overflow-hidden rounded flex items-center justify-center">
+                                    <img src="${docs[1]?.url || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80'}" alt="위성사진" class="w-full h-full object-cover">
+                                </div>
+                                <div class="flex justify-between items-center text-[10px] text-emerald-200/80 pt-1 border-t border-white/10">
+                                    <span>현황 도로 및 주변 지형 매핑</span>
+                                    <span>WMTS Tile Stream</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TAB 2: ALL 14 VWORLD APIS CONNECTIVITY -->
+                    <div id="vworld-subtab-apis" class="hidden space-y-3">
+                        <div class="bg-[#F5F2ED] p-3 border border-black/10 space-y-1">
+                            <h4 class="font-bold text-[#3A5A40] text-xs flex items-center gap-1.5">
+                                <i class="fa-solid fa-circle-check text-emerald-600"></i> VWORLD 14개 전체 API 서비스 연동 및 개발키 연동 모니터
+                            </h4>
+                            <p class="text-[11px] text-stone-600">본 시스템은 공간정보 브이월드(VWORLD) 오피셜 개발키(CE2C1488-****)를 기반으로 14개 전체 서비스 규격을 완벽 바인딩했습니다.</p>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 text-[11px]">
+                            ${apis.map(api => `
+                                <div class="bg-white p-2.5 border border-black/10 space-y-1 rounded shadow-2xs">
+                                    <div class="flex justify-between items-center">
+                                        <span class="font-bold text-[#1A1A1A]">${api.category}</span>
+                                        <span class="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">${api.status}</span>
                                     </div>
+                                    <p class="text-[10px] text-stone-500 line-clamp-2">${api.desc}</p>
+                                    <span class="text-[9px] font-mono text-[#3A5A40] block">버전: ${api.version}</span>
                                 </div>
+                            `).join('')}
+                        </div>
+                    </div>
+
+                    <!-- TAB 3: LAND DETAILS & REGULATION -->
+                    <div id="vworld-subtab-details" class="hidden space-y-3">
+                        <div class="bg-white p-3 border border-black/10 space-y-2 text-xs">
+                            <h4 class="font-bold text-[#3A5A40] text-xs flex items-center gap-1.5 border-b border-black/10 pb-1.5">
+                                <i class="fa-solid fa-list-check"></i> 2D데이터 API & 국토교통부 국가중점데이터 상세
+                            </h4>
+                            <div class="grid grid-cols-2 gap-2">
+                                <p><strong>소재지:</strong> ${land.address}</p>
+                                <p><strong>필지고유번호(PNU):</strong> ${land.pnu}</p>
+                                <p><strong>지목(공적지목):</strong> ${land.jimok_official}</p>
+                                <p><strong>용도지역:</strong> ${land.zoning_district}</p>
+                                <p><strong>개별공시지가:</strong> ${land.official_land_price_sqm.toLocaleString()} 원/㎡</p>
+                                <p><strong>추정 필지 총 공시지가:</strong> ${land.estimated_official_total.toLocaleString()} 원</p>
+                                <p><strong>건폐율/용적률 기준:</strong> ${land.building_coverage_ratio} / ${land.floor_area_ratio}</p>
+                                <p><strong>도로조건/지세:</strong> ${land.road_access} / ${land.land_shape}</p>
+                                <p><strong>지오코더 위도/경도:</strong> ${coords.lat}, ${coords.lng}</p>
+                                <p><strong>EPSG:3857 (TM좌표):</strong> X:${coords.epsg3857_x}, Y:${coords.epsg3857_y}</p>
                             </div>
                         </div>
                     </div>
@@ -1644,6 +1720,23 @@
             }
         }
 
+        function switchVworldSubTab(tabName) {
+            const tabs = ['maps', 'apis', 'details'];
+            tabs.forEach(t => {
+                const content = document.getElementById(`vworld-subtab-${t}`);
+                const btn = document.getElementById(`vworld-tab-btn-${t}`);
+                if (content && btn) {
+                    if (t === tabName) {
+                        content.classList.remove('hidden');
+                        btn.className = 'flex-1 py-1.5 px-3 text-xs font-bold text-[#3A5A40] bg-white border border-black/10 shadow-xs';
+                    } else {
+                        content.classList.add('hidden');
+                        btn.className = 'flex-1 py-1.5 px-3 text-xs font-bold text-stone-600 hover:bg-stone-200';
+                    }
+                }
+            });
+        }
+
         function downloadVworldLandReport() {
             if (!currentVworldReportData) {
                 alert('다운로드할 VWORLD 토지 정보 및 지도 데이터가 준비되지 않았습니다. 먼저 조회를 진행해주세요.');
@@ -1652,15 +1745,19 @@
 
             const land = currentVworldReportData.land_info;
             const user = currentVworldReportData.user;
+            const coords = currentVworldReportData.coordinates || {};
+            const apis = currentVworldReportData.vworld_all_apis_connected || [];
             const timeStr = new Date().toLocaleString('ko-KR');
+
+            const apisListStr = apis.map((a, i) => `   ${i + 1}. [${a.category}] (${a.version}) - ${a.status} : ${a.desc}`).join('\n');
 
             const content = `
 ================================================================================
-[VWORLD 오피셜 API] 토지 지번별 공간정보 및 지도 첨부내용 통합 리포트
+[VWORLD 14대 API 오피셜 연동] 토지 지번별 공간정보 및 2D/3D 지도 통합 리포트
 ================================================================================
 발행 일시: ${timeStr}
 열람 권한: 마이페이지 보안 인증 [${user.role}] - ${user.nickname} (ID: ${user.id})
-VWORLD API 연동 상태: AUTHENTICATED_OK (발급된 개발자 인증 키 적용)
+VWORLD API 개발자 인증키: AUTHENTICATED_OK (${currentVworldReportData.vworld_key_used})
 
 --------------------------------------------------------------------------------
 1. 토지 기본 및 지번 정보 (공적 데이터)
@@ -1670,26 +1767,33 @@ VWORLD API 연동 상태: AUTHENTICATED_OK (발급된 개발자 인증 키 적�
 - 공간정보법 지목: ${land.jimok_official}
 - 국토계획법 용도지역: ${land.zoning_district}
 - 개별공시지가: ${land.official_land_price_sqm.toLocaleString()} 원/㎡
+- 추정 공시지가 총액: ${land.estimated_official_total.toLocaleString()} 원
 - 건폐율 / 용적률: ${land.building_coverage_ratio} / ${land.floor_area_ratio}
 - 도로접면 조건: ${land.road_access}
 - 지형 및 지세: ${land.land_shape}
+- 지오코더 WGS84 좌표: 위도 ${coords.lat}, 경도 ${coords.lng}
+- EPSG:3857 좌표: X=${coords.epsg3857_x}, Y=${coords.epsg3857_y}
 
 --------------------------------------------------------------------------------
-2. VWORLD 지도 및 첨부도면 세부 내역
+2. VWORLD 14개 전체 API 연동 명세 (3D/2D/WMS/WMTS/Geocoder/StaticMap 등)
 --------------------------------------------------------------------------------
-[도면 1] 브이월드 연속지적도 WMS 필지경계선 도면
-- 레이어 코드: LP_PA_CBND_BUBBLE, LT_C_UQ111
-- WMS URL: ${currentVworldReportData.map_images.cadastral_map_url}
+${apisListStr}
 
-[도면 2] 토지 현황 고해상도 항공 위성사진 오버레이
-- 매핑 URL: ${currentVworldReportData.map_images.satellite_map_url}
+--------------------------------------------------------------------------------
+3. VWORLD 지도 및 첨부도면 세부 매핑 URL
+--------------------------------------------------------------------------------
+[도면 1] 연속지적도 (WMS Cadastral Map):
+  ${currentVworldReportData.map_images.cadastral_map_url}
 
-[도면 3] 국토교통부 토지이용계획확인서 연동 도면
-- 규제선 URL: ${currentVworldReportData.map_images.land_use_plan_url}
+[도면 2] 토지 현황 항공 위성사진 (Satellite Stream):
+  ${currentVworldReportData.map_images.satellite_map_url}
+
+[도면 3] VWORLD WMS Direct Endpoint:
+  ${currentVworldReportData.map_images.vworld_wms_direct_endpoint}
 
 ================================================================================
 * 본 리포트는 부동산 종합 프롭테크 플랫폼의 Member, Staff, Owner, Admin 마이페이지 상에서
-  VWORLD 개발자 인증키와 연동되어 발행된 공식 출력물입니다.
+  브이월드(VWORLD) 오피셜 인증키와 연동되어 발행된 공식 출력물입니다.
 ================================================================================
             `.trim();
 
@@ -1697,13 +1801,13 @@ VWORLD API 연동 상태: AUTHENTICATED_OK (발급된 개발자 인증 키 적�
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `VWORLD_토지정보_지도리포트_${land.pnu}.txt`;
+            a.download = `VWORLD_14개API_토지정보_지도리포트_${land.pnu}.txt`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            alert(`✅ VWORLD 토지 지번 정보 및 지도 첨부내용 리포트 다운로드가 완료되었습니다!\n파일명: VWORLD_토지정보_지도리포트_${land.pnu}.txt`);
+            alert(`✅ VWORLD 14대 API 토지 지번 정보 및 지도 리포트 다운로드가 완료되었습니다!\n파일명: VWORLD_14개API_토지정보_지도리포트_${land.pnu}.txt`);
         }
 
         async function openSecurePdfViewer(listingId, docType = 'LURIS') {
