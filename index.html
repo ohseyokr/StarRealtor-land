@@ -293,10 +293,11 @@
                     <div class="md:col-span-4 flex items-center gap-2 justify-end">
                         <label class="text-[11px] font-bold text-black/60 whitespace-nowrap">지도 레이어:</label>
                         <select id="map-tile-select" onchange="changeMapTileLayer(this.value)" class="bg-white border border-black/15 p-1.5 text-xs font-bold text-[#3A5A40] focus:outline-none w-full">
-                            <option value="google-hybrid">Google Hybrid (위성 + 도로/지명)</option>
-                            <option value="google-satellite">Google Satellite (고해상도 위성)</option>
-                            <option value="google-roadmap">Google Maps (일반 지적 도로망)</option>
-                            <option value="google-terrain">Google Terrain (지형 지세도)</option>
+                            <option value="vworld-cadastral" selected>VWORLD 연속지적 주제도 (WMTS + WMS 연속지적도)</option>
+                            <option value="vworld-hybrid">VWORLD 고해상도 위성 + 지적 경계 오버레이</option>
+                            <option value="vworld-base">VWORLD 2D 공간지도 (Base Map)</option>
+                            <option value="vworld-satellite">VWORLD 항공 위성 영상 (WMTS)</option>
+                            <option value="google-hybrid">Google Hybrid (참고용)</option>
                             <option value="osm">OpenStreetMap</option>
                         </select>
                     </div>
@@ -1931,10 +1932,10 @@
         }
 
         function openVworldOfficialMap(address, pnu, lat, lng, mapType) {
-            const cleanAddr = (address || '강원특별자치도 평창군 대관령면 수하리 산 45-2').trim();
-            const cleanPnu = pnu || '4276033022200450002';
-            const numLat = parseFloat(lat) || 37.6651;
-            const numLng = parseFloat(lng) || 128.7182;
+            const cleanAddr = (address || '경기도 고양시 덕양구 행주외동 129-1번지').trim();
+            const cleanPnu = pnu || '4128110600101290001';
+            const numLat = parseFloat(lat) || 37.5985;
+            const numLng = parseFloat(lng) || 126.8205;
             const encodedAddress = encodeURIComponent(cleanAddr);
             
             const docs = currentVworldReportData?.vworld_attached_docs || [];
@@ -2041,28 +2042,58 @@
                 if (!win.L) return;
                 const lat = numLat;
                 const lng = numLng;
+                const vworldKey = 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
                 
                 const map = win.L.map('leaflet-map-container').setView([lat, lng], 17);
+
+                // VWORLD Tile Layers
+                const vworldBase = win.L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© 국토교통부 브이월드(VWORLD)'
+                });
+
+                const vworldSat = win.L.tileLayer('https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg', {
+                    maxZoom: 19,
+                    attribution: '© 국토교통부 브이월드(VWORLD)'
+                });
+
+                const vworldHybrid = win.L.tileLayer('https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png', {
+                    maxZoom: 19,
+                    attribution: '© 국토교통부 브이월드(VWORLD)'
+                });
+
+                // VWORLD Cadastral WMS Overlay Layer (연속지적도)
+                const vworldCadastralWMS = win.L.tileLayer.wms('https://api.vworld.kr/req/wms?', {
+                    layers: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    styles: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    format: 'image/png',
+                    transparent: true,
+                    key: vworldKey,
+                    maxZoom: 19,
+                    attribution: '© 브이월드 연속지적도'
+                });
 
                 const osmLayer = win.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     maxZoom: 19,
                     attribution: '© OpenStreetMap'
                 });
 
-                const esriSatLayer = win.L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                    maxZoom: 19,
-                    attribution: 'Tiles © Esri'
-                });
-
                 if (mapType === 'satellite') {
-                    esriSatLayer.addTo(map);
+                    vworldSat.addTo(map);
+                    vworldHybrid.addTo(map);
+                    vworldCadastralWMS.addTo(map);
                 } else {
-                    osmLayer.addTo(map);
+                    vworldBase.addTo(map);
+                    vworldCadastralWMS.addTo(map);
                 }
 
                 win.L.control.layers({
-                    "일반 지도": osmLayer,
-                    "고해상도 항공 위성 지도": esriSatLayer
+                    "VWORLD 연속지적 주제도 (지적선 오버레이)": vworldBase,
+                    "VWORLD 고해상도 항공 위성 지도": vworldSat,
+                    "OpenStreetMap (참고용)": osmLayer
+                }, {
+                    "VWORLD 연속지적도 경계선 (LP_PA_CBND_BUBBLE)": vworldCadastralWMS,
+                    "VWORLD 도로/지명 라벨": vworldHybrid
                 }).addTo(map);
 
                 const marker = win.L.marker([lat, lng]).addTo(map);
@@ -2241,35 +2272,14 @@ ${apisListStr}
         }
 
         function addKoreaOnlyMaskOverlay(map) {
-            if (koreaMaskLayer && map) map.removeLayer(koreaMaskLayer);
-            
-            // Outer World bounding box
-            const outerWorld = [
-                [90, -180], [90, 180], [-90, 180], [-90, -180]
-            ];
-            // Detailed South Korea Territory Hole (Jeju, Dokdo, Ulleung, Peninsula)
-            const koreaHole = [
-                [38.9, 124.2],
-                [38.9, 128.6],
-                [38.6, 129.8],
-                [37.6, 131.9], // Dokdo & Ulleungdo
-                [33.1, 131.2],
-                [33.0, 126.0], // Jeju Island
-                [34.1, 124.2],
-                [38.9, 124.2]
-            ];
-
-            koreaMaskLayer = L.polygon([outerWorld, koreaHole], {
-                color: '#0f172a',
-                weight: 2,
-                fillColor: '#0f172a',
-                fillOpacity: 0.60,
-                interactive: false,
-                className: 'korea-mask-dark-overlay'
-            });
-
-            koreaMaskLayer.addTo(map);
+            // Mask removed to prevent dark grey coverage on map tiles
+            if (koreaMaskLayer && map) {
+                map.removeLayer(koreaMaskLayer);
+                koreaMaskLayer = null;
+            }
         }
+
+        let vworldCadastralLayerGroup = null;
 
         function initLandingGeofenceMap() {
             if (landingMap) {
@@ -2294,14 +2304,8 @@ ${apisListStr}
                 zoomControl: true
             });
 
-            // Google Tile Layers (Hybrid, Satellite, Roadmap, Terrain) + OSM
-            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
-                maxZoom: 20,
-                attribution: 'Map data © Google'
-            });
-
-            currentTileLayer = googleHybrid;
-            currentTileLayer.addTo(landingMap);
+            // Set VWORLD 연속지적 주제도 as default layer
+            changeMapTileLayer('vworld-cadastral');
 
             // Add Korea-only blur/dark mask overlay
             addKoreaOnlyMaskOverlay(landingMap);
@@ -2391,21 +2395,73 @@ ${apisListStr}
         function changeMapTileLayer(type) {
             if (!landingMap) return;
             if (currentTileLayer) landingMap.removeLayer(currentTileLayer);
-
-            let newLayer;
-            if (type === 'google-hybrid') {
-                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
-            } else if (type === 'google-satellite') {
-                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20 });
-            } else if (type === 'google-roadmap') {
-                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
-            } else if (type === 'google-terrain') {
-                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { maxZoom: 20 });
-            } else {
-                newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+            if (vworldCadastralLayerGroup) {
+                landingMap.removeLayer(vworldCadastralLayerGroup);
+                vworldCadastralLayerGroup = null;
             }
 
-            currentTileLayer = newLayer;
+            const VWORLD_KEY = 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
+
+            // High-performance VWORLD CDN Tile Endpoint
+            const vworldBaseCdn = 'https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png';
+            const vworldSatCdn = 'https://xdworld.vworld.kr/2d/Satellite/service/{z}/{x}/{y}.jpeg';
+            const vworldHybridCdn = 'https://xdworld.vworld.kr/2d/Hybrid/service/{z}/{x}/{y}.png';
+
+            if (type === 'vworld-cadastral') {
+                const baseTile = L.tileLayer(vworldBaseCdn, {
+                    maxZoom: 19,
+                    attribution: '© 국토교통부 브이월드(VWORLD 공간정보포털)'
+                });
+                const cadastralWms = L.tileLayer.wms('https://api.vworld.kr/req/wms?', {
+                    layers: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    styles: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    format: 'image/png',
+                    transparent: true,
+                    key: VWORLD_KEY,
+                    maxZoom: 19,
+                    attribution: '© VWORLD 연속지적도 주제도'
+                });
+                vworldCadastralLayerGroup = L.layerGroup([baseTile, cadastralWms]);
+                currentTileLayer = vworldCadastralLayerGroup;
+            } else if (type === 'vworld-hybrid') {
+                const satTile = L.tileLayer(vworldSatCdn, {
+                    maxZoom: 19,
+                    attribution: '© 국토교통부 브이월드 항공위성영상'
+                });
+                const hybridTile = L.tileLayer(vworldHybridCdn, {
+                    maxZoom: 19,
+                    attribution: '© VWORLD 도로/지명'
+                });
+                const cadastralWms = L.tileLayer.wms('https://api.vworld.kr/req/wms?', {
+                    layers: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    styles: 'LP_PA_CBND_BUBBLE,LP_PA_CBND_BONBUN',
+                    format: 'image/png',
+                    transparent: true,
+                    key: VWORLD_KEY,
+                    maxZoom: 19,
+                    attribution: '© VWORLD 연속지적도'
+                });
+                vworldCadastralLayerGroup = L.layerGroup([satTile, hybridTile, cadastralWms]);
+                currentTileLayer = vworldCadastralLayerGroup;
+            } else if (type === 'vworld-base') {
+                currentTileLayer = L.tileLayer(vworldBaseCdn, {
+                    maxZoom: 19, attribution: '© 국토교통부 브이월드(VWORLD)'
+                });
+            } else if (type === 'vworld-satellite') {
+                const satTile = L.tileLayer(vworldSatCdn, {
+                    maxZoom: 19, attribution: '© 국토교통부 브이월드 항공위성영상'
+                });
+                const hybridTile = L.tileLayer(vworldHybridCdn, {
+                    maxZoom: 19, attribution: '© VWORLD 도로/지명'
+                });
+                vworldCadastralLayerGroup = L.layerGroup([satTile, hybridTile]);
+                currentTileLayer = vworldCadastralLayerGroup;
+            } else if (type === 'google-hybrid') {
+                currentTileLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+            } else {
+                currentTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+            }
+
             currentTileLayer.addTo(landingMap);
 
             if (koreaMaskLayer) {
