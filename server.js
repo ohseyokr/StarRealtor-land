@@ -1085,6 +1085,73 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
     coordinates: { lat: resLat, lng: resLng }
   };
 
+  const extractedParcels = [
+    {
+      listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-1`,
+      title: `${cleanAddr} [VWORLD 필지#1]`,
+      address: `${cleanAddr}`,
+      jimok_official: vworldData.jimok_official,
+      area_sqm: 850,
+      price: officialPrice > 200000 ? 520000000 : 280000000,
+      official_land_price_sqm: officialPrice,
+      zoning_district: '계획관리지역',
+      road_access: '소로2류(폭 8m~10m) 포장도로 접함',
+      lat: resLat,
+      lng: resLng,
+      is_vworld_extracted: true,
+      assistant_id: 'u-owner-1',
+      assistant_nickname: '한국지역개발토지분석원',
+      listing_status: 'ACTIVE',
+      approval_status: 'APPROVED'
+    },
+    {
+      listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-2`,
+      title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4 [VWORLD 필지#2]`,
+      address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4번지`,
+      jimok_official: '전',
+      area_sqm: 620,
+      price: officialPrice > 200000 ? 380000000 : 190000000,
+      official_land_price_sqm: officialPrice,
+      zoning_district: '계획관리지역',
+      road_access: '지적도상 포장도로 접함',
+      lat: resLat + 0.0001,
+      lng: resLng + 0.0001,
+      is_vworld_extracted: true,
+      assistant_id: 'u-owner-1',
+      assistant_nickname: '한국지역개발토지분석원',
+      listing_status: 'ACTIVE',
+      approval_status: 'APPROVED'
+    },
+    {
+      listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-3`,
+      title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1 [VWORLD 필지#3]`,
+      address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1번지`,
+      jimok_official: '잡종지',
+      area_sqm: 1100,
+      price: officialPrice > 200000 ? 690000000 : 340000000,
+      official_land_price_sqm: officialPrice,
+      zoning_district: '보전관리지역',
+      road_access: '소로3류 포장도로 접함',
+      lat: resLat - 0.0001,
+      lng: resLng - 0.0001,
+      is_vworld_extracted: true,
+      assistant_id: 'u-owner-1',
+      assistant_nickname: '한국지역개발토지분석원',
+      listing_status: 'ACTIVE',
+      approval_status: 'APPROVED'
+    }
+  ];
+
+  // Register extracted parcels in inMemoryDB.listings so they persist on server
+  extractedParcels.forEach(p => {
+    const idx = inMemoryDB.listings.findIndex(l => l.listing_id === p.listing_id);
+    if (idx >= 0) {
+      inMemoryDB.listings[idx] = { ...inMemoryDB.listings[idx], ...p };
+    } else {
+      inMemoryDB.listings.unshift(p);
+    }
+  });
+
   res.json({
     success: true,
     address: cleanAddr,
@@ -1093,44 +1160,7 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
     molit: molitData,
     land_eum: landEumData,
     vworld: vworldData,
-    extracted_parcels: [
-      {
-        listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-1`,
-        title: `${cleanAddr} [VWORLD 필지#1]`,
-        address: `${cleanAddr}`,
-        jimok_official: vworldData.jimok_official,
-        area_sqm: 850,
-        price: officialPrice > 200000 ? 520000000 : 280000000,
-        official_land_price_sqm: officialPrice,
-        lat: resLat,
-        lng: resLng,
-        is_vworld_extracted: true
-      },
-      {
-        listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-2`,
-        title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4 [VWORLD 필지#2]`,
-        address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4번지`,
-        jimok_official: '전',
-        area_sqm: 620,
-        price: officialPrice > 200000 ? 380000000 : 190000000,
-        official_land_price_sqm: officialPrice,
-        lat: resLat + 0.0001,
-        lng: resLng + 0.0001,
-        is_vworld_extracted: true
-      },
-      {
-        listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-3`,
-        title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1 [VWORLD 필지#3]`,
-        address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1번지`,
-        jimok_official: '잡종지',
-        area_sqm: 1100,
-        price: officialPrice > 200000 ? 690000000 : 340000000,
-        official_land_price_sqm: officialPrice,
-        lat: resLat - 0.0001,
-        lng: resLng - 0.0001,
-        is_vworld_extracted: true
-      }
-    ]
+    extracted_parcels: extractedParcels
   });
 });
 
@@ -1850,14 +1880,41 @@ app.get('/api/cart', authenticateToken, (req, res) => {
 });
 
 app.post('/api/cart', authenticateToken, (req, res) => {
-  const { listing_id } = req.body;
+  const { listing_id, item } = req.body;
   if (!listing_id) return res.status(400).json({ error: 'listing_id가 필요합니다.' });
+
+  // If item object is provided and not in inMemoryDB.listings, register it
+  if (item && typeof item === 'object') {
+    const existingIdx = inMemoryDB.listings.findIndex(l => l.listing_id === listing_id);
+    if (existingIdx >= 0) {
+      inMemoryDB.listings[existingIdx] = { ...inMemoryDB.listings[existingIdx], ...item };
+    } else {
+      const newListing = {
+        listing_id: listing_id,
+        title: item.title || 'VWORLD 지적 필지',
+        address: item.address || '지적 주소',
+        jimok_official: item.jimok_official || '대',
+        area_sqm: Number(item.area_sqm) || 500,
+        price: Number(item.price) || 250000000,
+        zoning_district: item.zoning_district || '계획관리지역',
+        road_access: item.road_access || '포장도로 접함',
+        lat: Number(item.lat) || 37.5665,
+        lng: Number(item.lng) || 126.9780,
+        is_vworld_extracted: true,
+        assistant_id: 'u-owner-1',
+        assistant_nickname: '한국지역개발토지분석원',
+        listing_status: 'ACTIVE',
+        approval_status: 'APPROVED'
+      };
+      inMemoryDB.listings.unshift(newListing);
+    }
+  }
 
   const exists = inMemoryDB.carts.some(c => c.member_id === req.user.id && c.listing_id === listing_id);
   if (exists) return res.status(400).json({ error: '이미 관심 매물(쇼핑카드)에 담겨 있습니다.' });
 
   const cartItem = {
-    cart_id: `c-${Date.now()}`,
+    cart_id: `c-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     member_id: req.user.id,
     listing_id,
     added_at: new Date().toISOString()
@@ -2032,7 +2089,14 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
 app.get('/api/meetings/member', authenticateToken, (req, res) => {
   const userMeetings = inMemoryDB.meetings.filter(m => m.member_id === req.user.id);
   const userCarts = inMemoryDB.carts.filter(c => c.member_id === req.user.id);
-  const selectedListings = userCarts.map(c => inMemoryDB.listings.find(l => l.listing_id === c.listing_id)).filter(Boolean);
+  const selectedListings = userCarts.map(c => {
+    const l = inMemoryDB.listings.find(item => item.listing_id === c.listing_id);
+    if (!l) return null;
+    return {
+      ...l,
+      price_display: l.price ? `${(l.price / 100000000).toFixed(1)}억원` : '가격문의'
+    };
+  }).filter(Boolean);
 
   res.json({
     meetings: userMeetings,
