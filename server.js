@@ -130,6 +130,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '강원도 평창군 대관령면 수하리 청정 임야 토지',
       address: '강원특별자치도 평창군 대관령면 수하리 산 45-2',
+      lat: 37.6651,
+      lng: 128.7182,
       jimok_official: '임',
       area_sqm: 3305,
       price: 350000000,
@@ -163,6 +165,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)',
       address: '충청남도 당진시 신평면 금천리 123-5',
+      lat: 36.8921,
+      lng: 126.7112,
       jimok_official: '전',
       area_sqm: 1652,
       price: 180000000,
@@ -196,6 +200,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)',
       address: '경기도 용인시 처인구 양지면 양지리 78-1',
+      lat: 37.2348,
+      lng: 127.2891,
       jimok_official: '대',
       area_sqm: 660,
       price: 820000000,
@@ -229,6 +235,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '(임야) 경기도 포천시 창수면 가양리 369-6',
       address: '경기도 포천시 창수면 가양리 369-6',
+      lat: 37.9823,
+      lng: 127.1845,
       jimok_official: '임',
       area_sqm: 4958,
       price: 290000000,
@@ -249,6 +257,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '(대지) 경기도 양주시 고암동 603-7',
       address: '경기도 양주시 고암동 603-7',
+      lat: 37.8212,
+      lng: 127.0612,
       jimok_official: '대',
       area_sqm: 495,
       price: 650000000,
@@ -269,6 +279,8 @@ const inMemoryDB = {
       assistant_nickname: '토지조사원',
       title: '(공장용지) 경기도 포천시 내촌면 마명리 337',
       address: '경기도 포천시 내촌면 마명리 337',
+      lat: 37.7923,
+      lng: 127.2456,
       jimok_official: '장',
       area_sqm: 2314,
       price: 1250000000,
@@ -991,13 +1003,27 @@ app.get('/api/listings', (req, res) => {
 });
 
 // 대한민국 3대 공공데이터 OPEN API 연동엔드포인트 (국토교통부 + 토지이음 + 브이월드)
-app.post('/api/public-land-api/lookup', authenticateToken, (req, res) => {
-  const { address } = req.body;
-  if (!address) {
-    return res.status(400).json({ error: '지번 주소를 입력해주세요.' });
+app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
+  const { address, coordinates } = req.body;
+  let cleanAddr = address ? address.trim() : '';
+
+  if (!cleanAddr && coordinates && coordinates.lat && coordinates.lng) {
+    const lat = Number(coordinates.lat);
+    const lng = Number(coordinates.lng);
+    if (lat > 37.5 && lat < 37.8 && lng > 128.5 && lng < 128.9) {
+      cleanAddr = '강원특별자치도 평창군 대관령면 수하리 산 45-2';
+    } else if (lat > 36.7 && lat < 37.0 && lng > 126.5 && lng < 126.9) {
+      cleanAddr = '충청남도 당진시 신평면 금천리 123-5';
+    } else if (lat > 37.8 && lat < 38.1 && lng > 127.0 && lng < 127.3) {
+      cleanAddr = '경기도 포천시 창수면 가양리 369-6';
+    } else {
+      cleanAddr = `대한민국 필지 GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}) VWORLD 연동 지번`;
+    }
   }
 
-  const cleanAddr = address.trim();
+  if (!cleanAddr) {
+    return res.status(400).json({ error: '지번 주소 또는 GPS 좌표를 입력해주세요.' });
+  }
 
   // 금지구역 검증 (군사보호구역/지역은 차단, 군사보호해제/농업진흥/개발제한구역은 등록 가능)
   if (isMilitaryRestrictedZone(cleanAddr)) {
@@ -1044,6 +1070,9 @@ app.post('/api/public-land-api/lookup', authenticateToken, (req, res) => {
   if (cleanAddr.includes('용인') || cleanAddr.includes('양주')) officialPrice = 850000;
   else if (cleanAddr.includes('평창')) officialPrice = 45000;
 
+  const resLat = coordinates && coordinates.lat ? Number(coordinates.lat) : 37.5665;
+  const resLng = coordinates && coordinates.lng ? Number(coordinates.lng) : 126.9780;
+
   const vworldData = {
     api_source: 'V-World 브이월드 공간정보 2D/3D 지도 API',
     pnu: pnuCode,
@@ -1052,13 +1081,15 @@ app.post('/api/public-land-api/lookup', authenticateToken, (req, res) => {
     land_shape: '부정형 완경사지',
     road_side_attr: '소로2류(폭 8m~10m) 접함',
     vworld_tile_map_url: 'https://map.vworld.kr/js/vworldMapInit.js',
-    spatial_coords: { lat: 37.5665, lng: 126.9780 }
+    spatial_coords: { lat: resLat, lng: resLng },
+    coordinates: { lat: resLat, lng: resLng }
   };
 
   res.json({
     success: true,
     address: cleanAddr,
     pnu: pnuCode,
+    coordinates: { lat: resLat, lng: resLng },
     molit: molitData,
     land_eum: landEumData,
     vworld: vworldData
@@ -1462,7 +1493,7 @@ app.post('/api/listings', authenticateToken, (req, res) => {
     return res.status(403).json({ error: '조사연구원(Staff) 또는 관리자만 토지를 등록할 수 있습니다.' });
   }
 
-  const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url } = req.body;
+  const { title, address, lat, lng, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url } = req.body;
 
   // 군사보호구역/지역 검증 (군사보호해제/농업진흥/개발제한구역은 등록 가능)
   if (isMilitaryRestrictedZone(zoning_district) || isMilitaryRestrictedZone(title) || isMilitaryRestrictedZone(address)) {
@@ -1471,12 +1502,27 @@ app.post('/api/listings', authenticateToken, (req, res) => {
     });
   }
 
+  let calcLat = Number(lat);
+  let calcLng = Number(lng);
+  if (!calcLat || !calcLng) {
+    const addr = address || title || '';
+    if (addr.includes('평창')) { calcLat = 37.6651; calcLng = 128.7182; }
+    else if (addr.includes('당진')) { calcLat = 36.8921; calcLng = 126.7112; }
+    else if (addr.includes('용인')) { calcLat = 37.2348; calcLng = 127.2891; }
+    else if (addr.includes('포천') && addr.includes('가양')) { calcLat = 37.9823; calcLng = 127.1845; }
+    else if (addr.includes('포천') && addr.includes('마명')) { calcLat = 37.7923; calcLng = 127.2456; }
+    else if (addr.includes('양주')) { calcLat = 37.8212; calcLng = 127.0612; }
+    else { calcLat = 37.5665 + (Math.random() - 0.5) * 0.1; calcLng = 126.9780 + (Math.random() - 0.5) * 0.1; }
+  }
+
   const newListing = {
     listing_id: `lnd-${Date.now()}`,
     assistant_id: req.user.id,
     assistant_nickname: req.user.nickname || '담당조사원',
     title,
     address,
+    lat: calcLat,
+    lng: calcLng,
     jimok_official: jimok_official || '대',
     area_sqm: Number(area_sqm) || 100,
     price: Number(price) || 100000000,
