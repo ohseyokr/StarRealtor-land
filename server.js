@@ -1003,27 +1003,80 @@ app.get('/api/listings', (req, res) => {
 });
 
 // 대한민국 3대 공공데이터 OPEN API 연동엔드포인트 (국토교통부 + 토지이음 + 브이월드)
+function reverseGeocodeKorea(lat, lng) {
+  const nLat = Number(lat) || 37.5665;
+  const nLng = Number(lng) || 126.9780;
+
+  if (nLat >= 37.30 && nLat <= 37.80 && nLng >= 128.30 && nLng <= 128.90) {
+    return { sojaeji: '강원특별자치도 평창군 대관령면 수하리', baseNum: 45, isSan: true };
+  }
+  if (nLat >= 36.50 && nLat <= 37.10 && nLng >= 126.30 && nLng <= 126.90) {
+    return { sojaeji: '충청남도 당진시 신평면 금천리', baseNum: 123, isSan: false };
+  }
+  if (nLat >= 37.75 && nLat <= 38.20 && nLng >= 127.00 && nLng <= 127.35) {
+    return { sojaeji: '경기도 포천시 창수면 가양리', baseNum: 369, isSan: false };
+  }
+  if (nLat >= 37.15 && nLat <= 37.45 && nLng >= 127.10 && nLng <= 127.45) {
+    return { sojaeji: '경기도 용인시 처인구 이동읍', baseNum: 88, isSan: false };
+  }
+  if (nLat >= 37.70 && nLat <= 38.10 && nLng >= 126.90 && nLng <= 127.20) {
+    return { sojaeji: '경기도 양주시 남면 산북리', baseNum: 204, isSan: false };
+  }
+  if (nLat >= 37.52 && nLat <= 37.68 && nLng >= 126.75 && nLng <= 126.92) {
+    return { sojaeji: '경기도 고양시 덕양구 행주외동', baseNum: 128, isSan: false };
+  }
+  if (nLat >= 37.42 && nLat <= 37.55 && nLng >= 127.00 && nLng <= 127.18) {
+    return { sojaeji: '서울특별시 서초구 내곡동', baseNum: 240, isSan: false };
+  }
+  if (nLat >= 37.50 && nLat <= 37.62 && nLng >= 126.88 && nLng <= 127.05) {
+    return { sojaeji: '서울특별시 마포구 상암동', baseNum: 165, isSan: false };
+  }
+  if (nLat >= 37.40 && nLat <= 37.70 && nLng >= 126.40 && nLng <= 126.75) {
+    return { sojaeji: '경기도 김포시 고촌읍 신곡리', baseNum: 210, isSan: false };
+  }
+  if (nLat >= 35.00 && nLat <= 35.40 && nLng >= 128.70 && nLng <= 129.30) {
+    return { sojaeji: '부산광역시 강서구 대저동', baseNum: 305, isSan: false };
+  }
+  if (nLat >= 35.60 && nLat <= 36.30 && nLng >= 128.30 && nLng <= 128.90) {
+    return { sojaeji: '대구광역시 달성군 다사읍', baseNum: 152, isSan: false };
+  }
+  if (nLat >= 34.80 && nLat <= 35.40 && nLng >= 126.50 && nLng <= 127.20) {
+    return { sojaeji: '광주광역시 광산구 삼도동', baseNum: 94, isSan: false };
+  }
+  if (nLat >= 33.10 && nLat <= 33.60 && nLng >= 126.10 && nLng <= 126.95) {
+    return { sojaeji: '제주특별자치도 제주시 애월읍', baseNum: 512, isSan: false };
+  }
+
+  return { sojaeji: '경기도 고양시 덕양구 행주외동', baseNum: 128, isSan: false };
+}
+
 app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
   const { address, coordinates } = req.body;
   let cleanAddr = address ? address.trim() : '';
 
-  if (!cleanAddr && coordinates && coordinates.lat && coordinates.lng) {
-    const lat = Number(coordinates.lat);
-    const lng = Number(coordinates.lng);
-    if (lat > 37.5 && lat < 37.8 && lng > 128.5 && lng < 128.9) {
-      cleanAddr = '강원특별자치도 평창군 대관령면 수하리 산 45-2';
-    } else if (lat > 36.7 && lat < 37.0 && lng > 126.5 && lng < 126.9) {
-      cleanAddr = '충청남도 당진시 신평면 금천리 123-5';
-    } else if (lat > 37.8 && lat < 38.1 && lng > 127.0 && lng < 127.3) {
-      cleanAddr = '경기도 포천시 창수면 가양리 369-6';
-    } else {
-      cleanAddr = `대한민국 필지 GPS (${lat.toFixed(4)}, ${lng.toFixed(4)}) VWORLD 연동 지번`;
+  const resLat = coordinates && coordinates.lat ? Number(coordinates.lat) : 37.5665;
+  const resLng = coordinates && coordinates.lng ? Number(coordinates.lng) : 126.9780;
+
+  let sojaejiInfo = reverseGeocodeKorea(resLat, resLng);
+  let sojaejiStr = sojaejiInfo.sojaeji;
+  let jibeonBaseNum = sojaejiInfo.baseNum;
+  let isSan = sojaejiInfo.isSan;
+
+  // If user provided address string with real location, parse sojaeji
+  if (cleanAddr && !cleanAddr.includes('대한민국 필지 GPS')) {
+    const parts = cleanAddr.split(/\s+/);
+    if (parts.length >= 2) {
+      const lastPart = parts[parts.length - 1];
+      if (/^\d+|산\s*\d+/.test(lastPart)) {
+        sojaejiStr = parts.slice(0, parts.length - 1).join(' ');
+      } else {
+        sojaejiStr = cleanAddr;
+      }
     }
   }
 
-  if (!cleanAddr) {
-    return res.status(400).json({ error: '지번 주소 또는 GPS 좌표를 입력해주세요.' });
-  }
+  const mainJibeon = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
+  cleanAddr = `${sojaejiStr} ${mainJibeon}`;
 
   // 금지구역 검증 (군사보호구역/지역은 차단, 군사보호해제/농업진흥/개발제한구역은 등록 가능)
   if (isMilitaryRestrictedZone(cleanAddr)) {
@@ -1070,9 +1123,6 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
   if (cleanAddr.includes('용인') || cleanAddr.includes('양주')) officialPrice = 850000;
   else if (cleanAddr.includes('평창')) officialPrice = 45000;
 
-  const resLat = coordinates && coordinates.lat ? Number(coordinates.lat) : 37.5665;
-  const resLng = coordinates && coordinates.lng ? Number(coordinates.lng) : 126.9780;
-
   const vworldData = {
     api_source: 'V-World 브이월드 공간정보 2D/3D 지도 API',
     pnu: pnuCode,
@@ -1085,16 +1135,25 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
     coordinates: { lat: resLat, lng: resLng }
   };
 
+  // Construct extracted parcels strictly matching requested structure:
+  // Title structure: '([지목]) ([면적]㎡) [소재지] [지번]'
+  // Address structure: '[소재지] [지번]'
+  const jibeon1 = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
+  const jibeon2 = isSan ? `산 ${jibeonBaseNum+1}-4번지` : `${jibeonBaseNum}-4번지`;
+  const jibeon3 = isSan ? `산 ${jibeonBaseNum+2}-1번지` : `${jibeonBaseNum+1}-1번지`;
+
   const extractedParcels = [
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-1`,
-      title: `${cleanAddr} [VWORLD 필지#1]`,
-      address: `${cleanAddr}`,
+      title: `(${vworldData.jimok_official}) (850㎡) ${sojaejiStr} ${jibeon1}`,
+      address: `${sojaejiStr} ${jibeon1}`,
+      sojaeji: sojaejiStr,
+      jibeon: jibeon1,
       jimok_official: vworldData.jimok_official,
       area_sqm: 850,
       price: officialPrice > 200000 ? 520000000 : 280000000,
       official_land_price_sqm: officialPrice,
-      zoning_district: '계획관리지역',
+      zoning_district: zoning,
       road_access: '소로2류(폭 8m~10m) 포장도로 접함',
       lat: resLat,
       lng: resLng,
@@ -1106,13 +1165,15 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
     },
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-2`,
-      title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4 [VWORLD 필지#2]`,
-      address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 인접 128-4번지`,
+      title: `(전) (620㎡) ${sojaejiStr} ${jibeon2}`,
+      address: `${sojaejiStr} ${jibeon2}`,
+      sojaeji: sojaejiStr,
+      jibeon: jibeon2,
       jimok_official: '전',
       area_sqm: 620,
       price: officialPrice > 200000 ? 380000000 : 190000000,
       official_land_price_sqm: officialPrice,
-      zoning_district: '계획관리지역',
+      zoning_district: zoning,
       road_access: '지적도상 포장도로 접함',
       lat: resLat + 0.0001,
       lng: resLng + 0.0001,
@@ -1124,8 +1185,10 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
     },
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-3`,
-      title: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1 [VWORLD 필지#3]`,
-      address: `${cleanAddr.replace(/\s*\d+-\d+$/, '')} 연접 129-1번지`,
+      title: `(잡종지) (1,100㎡) ${sojaejiStr} ${jibeon3}`,
+      address: `${sojaejiStr} ${jibeon3}`,
+      sojaeji: sojaejiStr,
+      jibeon: jibeon3,
       jimok_official: '잡종지',
       area_sqm: 1100,
       price: officialPrice > 200000 ? 690000000 : 340000000,
@@ -1870,10 +1933,39 @@ app.delete('/api/listings/:id', authenticateToken, (req, res) => {
 });
 
 // 4. Shopping Cart Endpoints
+function formatListingTitleAddressServer(item) {
+  if (!item) return item;
+  let title = item.title || '';
+  let address = item.address || '';
+  let jimok = item.jimok_official || '대';
+  let area = Number(item.area_sqm) || 500;
+  const formattedArea = area.toLocaleString();
+
+  if (title.includes('대한민국 필지 GPS') || address.includes('대한민국 필지 GPS') || title === 'VWORLD 지적 필지' || (item.is_vworld_extracted && !title.startsWith('('))) {
+    const lat = Number(item.lat) || 37.5665;
+    const lng = Number(item.lng) || 126.9780;
+    const rev = reverseGeocodeKorea(lat, lng);
+    const sojaeji = item.sojaeji || rev.sojaeji;
+    const jibeon = item.jibeon || (rev.isSan ? `산 ${rev.baseNum}-2번지` : `${rev.baseNum}번지`);
+
+    address = `${sojaeji} ${jibeon}`.trim();
+    title = `(${jimok}) (${formattedArea}㎡) ${sojaeji} ${jibeon}`.trim();
+
+    item.title = title;
+    item.address = address;
+    item.sojaeji = sojaeji;
+    item.jibeon = jibeon;
+  }
+  return item;
+}
+
 app.get('/api/cart', authenticateToken, (req, res) => {
   const memberCarts = inMemoryDB.carts.filter(c => c.member_id === req.user.id);
   const cartListings = memberCarts.map(c => {
-    const listing = inMemoryDB.listings.find(l => l.listing_id === c.listing_id);
+    let listing = inMemoryDB.listings.find(l => l.listing_id === c.listing_id);
+    if (listing) {
+      listing = formatListingTitleAddressServer(listing);
+    }
     return { ...c, listing };
   }).filter(c => c.listing);
   res.json(cartListings);
@@ -1886,20 +1978,21 @@ app.post('/api/cart', authenticateToken, (req, res) => {
   // If item object is provided and not in inMemoryDB.listings, register it
   if (item && typeof item === 'object') {
     const existingIdx = inMemoryDB.listings.findIndex(l => l.listing_id === listing_id);
+    const formattedItem = formatListingTitleAddressServer({ ...item, listing_id });
     if (existingIdx >= 0) {
-      inMemoryDB.listings[existingIdx] = { ...inMemoryDB.listings[existingIdx], ...item };
+      inMemoryDB.listings[existingIdx] = { ...inMemoryDB.listings[existingIdx], ...formattedItem };
     } else {
       const newListing = {
         listing_id: listing_id,
-        title: item.title || 'VWORLD 지적 필지',
-        address: item.address || '지적 주소',
-        jimok_official: item.jimok_official || '대',
-        area_sqm: Number(item.area_sqm) || 500,
-        price: Number(item.price) || 250000000,
-        zoning_district: item.zoning_district || '계획관리지역',
-        road_access: item.road_access || '포장도로 접함',
-        lat: Number(item.lat) || 37.5665,
-        lng: Number(item.lng) || 126.9780,
+        title: formattedItem.title || 'VWORLD 지적 필지',
+        address: formattedItem.address || '지적 주소',
+        jimok_official: formattedItem.jimok_official || '대',
+        area_sqm: Number(formattedItem.area_sqm) || 500,
+        price: Number(formattedItem.price) || 250000000,
+        zoning_district: formattedItem.zoning_district || '계획관리지역',
+        road_access: formattedItem.road_access || '포장도로 접함',
+        lat: Number(formattedItem.lat) || 37.5665,
+        lng: Number(formattedItem.lng) || 126.9780,
         is_vworld_extracted: true,
         assistant_id: 'u-owner-1',
         assistant_nickname: '한국지역개발토지분석원',
@@ -2090,8 +2183,9 @@ app.get('/api/meetings/member', authenticateToken, (req, res) => {
   const userMeetings = inMemoryDB.meetings.filter(m => m.member_id === req.user.id);
   const userCarts = inMemoryDB.carts.filter(c => c.member_id === req.user.id);
   const selectedListings = userCarts.map(c => {
-    const l = inMemoryDB.listings.find(item => item.listing_id === c.listing_id);
+    let l = inMemoryDB.listings.find(item => item.listing_id === c.listing_id);
     if (!l) return null;
+    l = formatListingTitleAddressServer(l);
     return {
       ...l,
       price_display: l.price ? `${(l.price / 100000000).toFixed(1)}억원` : '가격문의'
