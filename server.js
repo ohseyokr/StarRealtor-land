@@ -59,11 +59,19 @@ if (process.env.DATABASE_URL) {
   }
 }
 
+// Helper function to validate military restricted zones (군사보호구역/지역은 금지, 군사보호해제구역/농업진흥구역/개발제한구역은 등록 가능)
+function isMilitaryRestrictedZone(str) {
+  if (!str) return false;
+  // '군사보호해제', '군사기지해제', '군사시설보호구역해제' 등 '해제' 구역 텍스트를 우선 제거 후 '군사보호/군사기지' 검사
+  const cleaned = str.replace(/(군사보호|군사기지|군사시설|보호구역)\s*해제/gi, '');
+  return /(군사보호|군사기지|군사시설보호)/i.test(cleaned);
+}
+
 // In-Memory Database for local preview / standalone usage
 const inMemoryDB = {
   config: {
     config_id: '1',
-    office_name: '스타공인중개사사무소',
+    office_name: '한국지역개발토지분석원',
     owner_name: '홍길동',
     address: '서울특별시 서초구 반포대로 100, 4층',
     business_reg_num: '120-12-12345',
@@ -71,7 +79,7 @@ const inMemoryDB = {
     mobile_phone: '010-9876-5432',
     landline_phone: '02-1234-5678',
     fax_num: '02-1234-5679',
-    email: 'owner@starrealtor-land.co.kr'
+    email: 'owner@korea-land.or.kr'
   },
   users: [
     {
@@ -86,9 +94,9 @@ const inMemoryDB = {
     },
     {
       user_id: 'u-owner-1',
-      email: 'owner@starrealtor-land.co.kr',
+      email: 'owner@korea-land.or.kr',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '대표중개사',
+      nickname: '한국지역개발토지분석원',
       name: '홍길동',
       phone_number: '010-9876-5432',
       role: 'OWNER',
@@ -96,9 +104,9 @@ const inMemoryDB = {
     },
     {
       user_id: 'u-staff-1',
-      email: 'staff1@gmail.com',
+      email: 'staff1@korea-land.or.kr',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '김보조원',
+      nickname: '김조사연구원',
       name: '김철수',
       phone_number: '010-3333-4444',
       role: 'STAFF',
@@ -106,7 +114,7 @@ const inMemoryDB = {
     },
     {
       user_id: 'u-member-1',
-      email: 'member1@gmail.com',
+      email: 'member1@korea-land.or.kr',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
       nickname: '토지투자왕',
       name: '이영희',
@@ -119,14 +127,14 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-101',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
-      title: '강원도 평창군 대관령면 수하리 청정 임야 매물',
+      assistant_nickname: '김조사연구원',
+      title: '강원도 평창군 대관령면 수하리 청정 임야 토지',
       address: '강원특별자치도 평창군 대관령면 수하리 산 45-2',
       jimok_official: '임',
       area_sqm: 3305,
       price: 350000000,
       zoning_district: '보전관리지역',
-      road_access: '2차선 포장도로 접합',
+      road_access: '2차선 포장도로 접함',
       youtube_url: 'https://www.youtube.com/embed/dQw4w9WgXcQ',
       doc_luris_pdf_url: '/sample-luris.pdf',
       doc_ledger_pdf_url: '/sample-ledger.pdf',
@@ -139,7 +147,7 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 2).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김보조원',
+          requester_name: '김조사연구원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000).toISOString(),
           decider_id: 'u-owner-1',
@@ -152,7 +160,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-102',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
+      assistant_nickname: '김조사연구원',
       title: '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)',
       address: '충청남도 당진시 신평면 금천리 123-5',
       jimok_official: '전',
@@ -172,7 +180,7 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 3).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김보조원',
+          requester_name: '김조사연구원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000 * 2).toISOString(),
           decider_id: 'u-owner-1',
@@ -185,7 +193,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-103',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
+      assistant_nickname: '김조사연구원',
       title: '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)',
       address: '경기도 용인시 처인구 양지면 양지리 78-1',
       jimok_official: '대',
@@ -205,7 +213,7 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 4).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김보조원',
+          requester_name: '김조사연구원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000 * 3).toISOString(),
           decider_id: 'u-owner-1',
@@ -218,7 +226,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-104',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
+      assistant_nickname: '김조사연구원',
       title: '(임야) 경기도 포천시 창수면 가양리 369-6',
       address: '경기도 포천시 창수면 가양리 369-6',
       jimok_official: '임',
@@ -238,7 +246,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-105',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
+      assistant_nickname: '김조사연구원',
       title: '(대지) 경기도 양주시 고암동 603-7',
       address: '경기도 양주시 고암동 603-7',
       jimok_official: '대',
@@ -258,7 +266,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-106',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김보조원',
+      assistant_nickname: '김조사연구원',
       title: '(공장용지) 경기도 포천시 내촌면 마명리 337',
       address: '경기도 포천시 내촌면 마명리 337',
       jimok_official: '장',
@@ -982,11 +990,10 @@ app.post('/api/public-land-api/lookup', authenticateToken, (req, res) => {
 
   const cleanAddr = address.trim();
 
-  // 금지구역 검증
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(cleanAddr)) {
+  // 금지구역 검증 (군사보호구역/지역은 차단, 군사보호해제/농업진흥/개발제한구역은 등록 가능)
+  if (isMilitaryRestrictedZone(cleanAddr)) {
     return res.status(400).json({
-      error: '등록 불가 매물 경고: 국토교통부 토지이용계획 데이터 확인 결과, 해당 지번은 [군사보호구역/농업진흥구역/개발제한구역]으로 규제되어 매물 등록이 불가합니다.'
+      error: '등록 불가 토지 경고: 국토교통부 토지이용계획 데이터 확인 결과, 해당 지번은 [군사보호구역]에 속하여 토지 수집 및 등록이 불가합니다. (군사보호해제구역, 농업진흥구역, 개발제한구역은 등록 가능)'
     });
   }
 
@@ -1443,23 +1450,22 @@ function addListingApprovalRequest(listing, { request_type, requester_id, reques
 // Register New Land Listing (Staff or Admin)
 app.post('/api/listings', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 또는 관리자만 매물을 등록할 수 있습니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 또는 관리자만 토지를 등록할 수 있습니다.' });
   }
 
   const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url, doc_luris_pdf_url, doc_ledger_pdf_url, doc_cadastral_pdf_url } = req.body;
 
-  // Requirement 4 Validation: Prohibit restricted zones (군사보호지역/농업진흥구역/개발제한구역)
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(zoning_district) || restrictedRegex.test(title) || restrictedRegex.test(address)) {
+  // 군사보호구역/지역 검증 (군사보호해제/농업진흥/개발제한구역은 등록 가능)
+  if (isMilitaryRestrictedZone(zoning_district) || isMilitaryRestrictedZone(title) || isMilitaryRestrictedZone(address)) {
     return res.status(400).json({
-      error: '등록 불가 매물: 군사보호지역, 농업진흥구역(절대농지), 개발제한구역(그린벨트)의 토지는 법적으로 수집 및 등록이 전면 금지되어 있습니다.'
+      error: '등록 불가 토지: 군사보호구역(지역)에 속하는 토지는 수집 및 등록이 금지되어 있습니다. (단, 군사보호해제구역, 농업진흥구역, 개발제한구역은 등록 가능)'
     });
   }
 
   const newListing = {
     listing_id: `lnd-${Date.now()}`,
     assistant_id: req.user.id,
-    assistant_nickname: req.user.nickname || '담당보조원',
+    assistant_nickname: req.user.nickname || '담당조사원',
     title,
     address,
     jimok_official: jimok_official || '대',
@@ -1491,19 +1497,19 @@ app.post('/api/listings', authenticateToken, (req, res) => {
     success: true,
     listing: newListing,
     message: req.user.role === 'ADMIN' 
-      ? '관리자 권한으로 매물이 직권 즉시 승인 등록되었습니다.' 
-      : '토지 매물이 등록되었으며, 개업공인중개사(Owner)에게 등록승인요청이 전송되었습니다.'
+      ? '관리자 권한으로 대상 토지가 직권 즉시 승인 등록되었습니다.' 
+      : '대상 토지가 등록되었으며, 한국지역개발토지분석원(Owner)에게 등록승인요청이 전송되었습니다.'
   });
 });
 
 // Staff submits Approval Request (REGISTRATION, EDIT, DELETE)
 app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 권한이 필요합니다.' });
   }
 
   const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+  if (!listing) return res.status(404).json({ error: '대상 토지를 찾을 수 없습니다.' });
 
   const { request_type, pending_data } = req.body;
 
@@ -1516,7 +1522,7 @@ app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => 
       pending_data,
       status: 'PENDING'
     });
-    return res.json({ success: true, message: '수정승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+    return res.json({ success: true, message: '수정승인요청이 한국지역개발토지분석원(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
   } else if (request_type === 'DELETE') {
     listing.approval_status = 'PENDING_DELETE';
     addListingApprovalRequest(listing, {
@@ -1525,7 +1531,7 @@ app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => 
       requester_name: req.user.nickname,
       status: 'PENDING'
     });
-    return res.json({ success: true, message: '삭제승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+    return res.json({ success: true, message: '삭제승인요청이 한국지역개발토지분석원(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
   } else if (request_type === 'REGISTRATION') {
     listing.approval_status = 'PENDING_REGISTRATION';
     addListingApprovalRequest(listing, {
@@ -1534,7 +1540,7 @@ app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => 
       requester_name: req.user.nickname,
       status: 'PENDING'
     });
-    return res.json({ success: true, message: '등록승인요청이 개업공인중개사(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
+    return res.json({ success: true, message: '등록승인요청이 한국지역개발토지분석원(Owner)에게 시간정보와 함께 전송되었습니다.', listing });
   }
 
   res.status(400).json({ error: '올바른 승인요청 구분을 입력해주세요.' });
@@ -1543,11 +1549,11 @@ app.post('/api/listings/:id/request-approval', authenticateToken, (req, res) => 
 // Owner approves or rejects approval request (with Rejection Reason)
 app.post('/api/listings/:id/owner-approval-decision', authenticateToken, (req, res) => {
   if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '개업공인중개사(Owner) 또는 관리자 권한이 필요합니다.' });
+    return res.status(403).json({ error: '한국지역개발토지분석원(Owner) 또는 관리자 권한이 필요합니다.' });
   }
 
   const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+  if (!listing) return res.status(404).json({ error: '대상 토지를 찾을 수 없습니다.' });
 
   const { decision, rejection_reason } = req.body;
   if (!decision) return res.status(400).json({ error: '결정(APPROVE 또는 REJECT)을 지정해주세요.' });
@@ -1602,7 +1608,7 @@ app.post('/api/listings/:id/owner-approval-decision', authenticateToken, (req, r
 
     listing.approval_status = 'REJECTED';
 
-    return res.json({ success: true, message: '요청이 반려되었습니다. 작성하신 반려 사유가 Staff에게 전달됩니다.', listing });
+    return res.json({ success: true, message: '요청이 반려되었습니다. 작성하신 반려 사유가 조사연구원(Staff)에게 전달됩니다.', listing });
   }
 
   res.status(400).json({ error: '올바른 결정을 선택해주세요.' });
@@ -1615,14 +1621,14 @@ app.post('/api/listings/:id/admin-change-staff', authenticateToken, (req, res) =
   }
 
   const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+  if (!listing) return res.status(404).json({ error: '대상 토지를 찾을 수 없습니다.' });
 
   const { new_staff_id, reason } = req.body;
-  if (!new_staff_id) return res.status(400).json({ error: '변경할 담당 Staff를 선택해주세요.' });
-  if (!reason || !reason.trim()) return res.status(400).json({ error: '담당 Staff 변경 사유를 입력해야 합니다.' });
+  if (!new_staff_id) return res.status(400).json({ error: '변경할 담당 조사연구원을 선택해주세요.' });
+  if (!reason || !reason.trim()) return res.status(400).json({ error: '담당 조사연구원 변경 사유를 입력해야 합니다.' });
 
   const newStaff = inMemoryDB.users.find(u => u.user_id === new_staff_id);
-  if (!newStaff) return res.status(404).json({ error: '지정한 Staff 계정을 찾을 수 없습니다.' });
+  if (!newStaff) return res.status(404).json({ error: '지정한 조사연구원 계정을 찾을 수 없습니다.' });
 
   const oldStaffName = listing.assistant_nickname;
   listing.assistant_id = newStaff.user_id;
@@ -1635,10 +1641,10 @@ app.post('/api/listings/:id/admin-change-staff', authenticateToken, (req, res) =
     status: 'APPROVED',
     decider_id: req.user.id,
     decider_name: req.user.nickname,
-    rejection_reason: `[관리자 담당 Staff 변경] 기존 (${oldStaffName}) -> 변경 (${newStaff.nickname}). 변경사유: ${reason.trim()}`
+    rejection_reason: `[관리자 담당 조사연구원 변경] 기존 (${oldStaffName}) -> 변경 (${newStaff.nickname}). 변경사유: ${reason.trim()}`
   });
 
-  res.json({ success: true, message: `담당 Staff가 ${newStaff.nickname}(으)로 성공적으로 변경되었습니다.`, listing });
+  res.json({ success: true, message: `담당 조사연구원이 ${newStaff.nickname}(으)로 성공적으로 변경되었습니다.`, listing });
 });
 
 // Admin deletes listing directly with reason
@@ -1648,7 +1654,7 @@ app.post('/api/listings/:id/admin-delete', authenticateToken, (req, res) => {
   }
 
   const listing = inMemoryDB.listings.find(l => l.listing_id === req.params.id);
-  if (!listing) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+  if (!listing) return res.status(404).json({ error: '대상 토지를 찾을 수 없습니다.' });
 
   const { reason } = req.body;
   if (!reason || !reason.trim()) return res.status(400).json({ error: '삭제 사유를 입력해야 합니다.' });
@@ -1666,7 +1672,7 @@ app.post('/api/listings/:id/admin-delete', authenticateToken, (req, res) => {
     rejection_reason: `[관리자 직권 삭제] 사유: ${reason.trim()}`
   });
 
-  res.json({ success: true, message: '매물이 삭제 처리되었습니다. 삭제 사유가 Staff 및 Owner에게 공유됩니다.', listing });
+  res.json({ success: true, message: '대상 토지가 삭제 처리되었습니다. 삭제 사유가 조사연구원(Staff) 및 한국지역개발토지분석원(Owner)에게 공유됩니다.', listing });
 });
 
 // Edit Land Listing
@@ -1676,15 +1682,14 @@ app.put('/api/listings/:id', authenticateToken, (req, res) => {
   }
 
   const idx = inMemoryDB.listings.findIndex(l => l.listing_id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: '매물을 찾을 수 없습니다.' });
+  if (idx === -1) return res.status(404).json({ error: '대상 토지를 찾을 수 없습니다.' });
 
   const { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url } = req.body;
 
-  // Restricted zone check
-  const restrictedRegex = /(군사보호|군사기지|농업진흥|절대농지|개발제한|그린벨트)/i;
-  if (restrictedRegex.test(zoning_district) || restrictedRegex.test(title) || restrictedRegex.test(address)) {
+  // 군사보호구역/지역 검증 (군사보호해제/농업진흥/개발제한구역은 수정/등록 가능)
+  if (isMilitaryRestrictedZone(zoning_district) || isMilitaryRestrictedZone(title) || isMilitaryRestrictedZone(address)) {
     return res.status(400).json({
-      error: '등록 불가 매물: 군사보호지역, 농업진흥구역, 개발제한구역 토지는 등록할 수 없습니다.'
+      error: '수정 불가 토지: 군사보호구역(지역)에 속하는 토지는 등록할 수 없습니다. (단, 군사보호해제구역, 농업진흥구역, 개발제한구역은 등록 가능)'
     });
   }
 
@@ -1698,7 +1703,7 @@ app.put('/api/listings/:id', authenticateToken, (req, res) => {
       pending_data: { title, address, jimok_official, area_sqm, price, zoning_district, road_access, youtube_url },
       status: 'PENDING'
     });
-    return res.json({ success: true, message: '수정사항이 등록되었으며 대표자(Owner)에게 수정승인요청이 전달되었습니다.', listing: inMemoryDB.listings[idx] });
+    return res.json({ success: true, message: '수정사항이 등록되었으며 한국지역개발토지분석원(Owner)에게 수정승인요청이 전달되었습니다.', listing: inMemoryDB.listings[idx] });
   }
 
   inMemoryDB.listings[idx] = {
@@ -1807,8 +1812,8 @@ async function createGoogleMeetEvent({ summary, description, startTime, memberEm
     if (staffEmail && staffEmail.includes('@')) attendees.push({ email: staffEmail });
 
     const event = {
-      summary: summary || '[스타부동산] 토지 현장 및 법률 분석 Google Meet 화상 상담',
-      description: description || '스타부동산 플랫폼 토지 분석 화상 상담 예약',
+      summary: summary || '[한국지역개발토지분석원] 토지 현장 및 법률 분석 Google Meet 화상 상담',
+      description: description || '한국지역개발토지분석원 플랫폼 토지 분석 화상 상담 예약',
       start: { dateTime: startDateTime.toISOString() },
       end: { dateTime: endDateTime.toISOString() },
       conferenceData: {
@@ -1860,7 +1865,7 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
 
   const staff = inMemoryDB.users.find(u => u.user_id === listing.assistant_id) || {
     nickname: listing.assistant_nickname,
-    email: 'staff@starrealtor-land.co.kr',
+    email: 'staff@korea-land.or.kr',
     phone_number: '010-3333-4444'
   };
 
@@ -1873,8 +1878,8 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
   const userTokens = req.user.google_tokens || member.google_tokens || staff.google_tokens;
 
   const meetResult = await createGoogleMeetEvent({
-    summary: `[스타부동산] ${listing.title} 토지분석 Google Meet 화상 상담`,
-    description: `매물명: ${listing.title}\n상담일시: ${start_time}\n회원 닉네임: ${member.nickname}\n담당 보조원: ${staff.nickname}`,
+    summary: `[한국지역개발토지분석원] ${listing.title} 토지분석 Google Meet 화상 상담`,
+    description: `토지명: ${listing.title}\n상담일시: ${start_time}\n회원 닉네임: ${member.nickname}\n담당 조사연구원: ${staff.nickname}`,
     startTime: start_time,
     memberEmail: member.email,
     staffEmail: staff.email,
@@ -1959,13 +1964,13 @@ app.post('/api/meetings/:id/cancel-request', authenticateToken, (req, res) => {
     note: '회원이 마이페이지에서 Google Meet 화상 상담 취소 요청을 접수함'
   });
 
-  res.json({ success: true, message: 'Google Meet 상담 취소 요청이 접수되었습니다. 담당 중개보조원(Staff) 및 대표자(Owner) 승인 후 환불이 진행됩니다.', meeting });
+  res.json({ success: true, message: 'Google Meet 상담 취소 요청이 접수되었습니다. 담당 조사연구원(Staff) 및 대표자(Owner) 승인 후 환불이 진행됩니다.', meeting });
 });
 
 // 2. Staff checks member's cancel request and forwards to Owner ('취소승인환불요청')
 app.post('/api/meetings/:id/staff-request-refund', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 권한이 필요합니다.' });
   }
 
   const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
@@ -1976,16 +1981,16 @@ app.post('/api/meetings/:id/staff-request-refund', authenticateToken, (req, res)
     actor_nickname: req.user.nickname,
     action: '취소승인 환불요청 (Owner 전송)',
     status: 'REFUND_APPROVAL_REQUESTED',
-    note: '중개보조원이 회원의 취소 요청을 확인하고 개업공인중개사(Owner)에게 취소 승인 및 환불 검토를 요청함'
+    note: '조사연구원이 회원의 취소 요청을 확인하고 한국지역개발토지분석원(Owner)에게 취소 승인 및 환불 검토를 요청함'
   });
 
-  res.json({ success: true, message: '개업공인중개사(Owner)에게 취소 승인 및 환불 검토 요청이 전송되었습니다.', meeting });
+  res.json({ success: true, message: '한국지역개발토지분석원(Owner)에게 취소 승인 및 환불 검토 요청이 전송되었습니다.', meeting });
 });
 
 // 2-B. Staff rejects member's cancel request ('취소요청거절')
 app.post('/api/meetings/:id/staff-reject-cancel', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 권한이 필요합니다.' });
   }
 
   const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
@@ -1996,7 +2001,7 @@ app.post('/api/meetings/:id/staff-reject-cancel', authenticateToken, (req, res) 
     actor_nickname: req.user.nickname,
     action: '취소요청 거절',
     status: 'CANCEL_REJECTED',
-    note: '중개보조원(Staff)이 회원의 취소 요청을 거절함. Google Meet 화상 상담 일정이 정상 유지됩니다.'
+    note: '조사연구원(Staff)이 회원의 취소 요청을 거절함. Google Meet 화상 상담 일정이 정상 유지됩니다.'
   });
 
   res.json({ success: true, message: '취소 요청이 거절되었습니다. 화상 상담 일정이 정상 유지됩니다.', meeting });
@@ -2005,7 +2010,7 @@ app.post('/api/meetings/:id/staff-reject-cancel', authenticateToken, (req, res) 
 // 3. Owner approves ('취소승인-환불진행') or rejects ('취소반려-환불불가')
 app.post('/api/meetings/:id/owner-decision', authenticateToken, (req, res) => {
   if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '개업공인중개사(Owner) 권한이 필요합니다.' });
+    return res.status(403).json({ error: '한국지역개발토지분석원(Owner) 권한이 필요합니다.' });
   }
 
   const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
@@ -2065,7 +2070,7 @@ app.delete('/api/meetings/:id', authenticateToken, (req, res) => {
 // CRITICAL REQUIREMENT 6: Staff can ONLY see Member ID and Nickname! No email, name, or phone!
 app.get('/api/meetings/staff', authenticateToken, (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 권한이 필요합니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 권한이 필요합니다.' });
   }
 
   const staffMeetings = inMemoryDB.meetings
@@ -2104,7 +2109,7 @@ app.get('/api/meetings/staff', authenticateToken, (req, res) => {
 // Staff/Admin Regenerate Google Meet API Link
 app.post('/api/meetings/:id/google-meet', authenticateToken, async (req, res) => {
   if (req.user.role !== 'STAFF' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '중개보조원(Staff) 또는 관리자 권한이 필요합니다.' });
+    return res.status(403).json({ error: '조사연구원(Staff) 또는 관리자 권한이 필요합니다.' });
   }
 
   const meeting = inMemoryDB.meetings.find(m => m.meeting_id === req.params.id);
@@ -2114,8 +2119,8 @@ app.post('/api/meetings/:id/google-meet', authenticateToken, async (req, res) =>
   const member = inMemoryDB.users.find(u => u.user_id === meeting.member_id);
 
   const meetResult = await createGoogleMeetEvent({
-    summary: `[스타부동산] ${meeting.listing_title} 화상상담`,
-    description: `매물명: ${meeting.listing_title}\n상담일시: ${meeting.start_time}\n담당자: ${staff.nickname}`,
+    summary: `[한국지역개발토지분석원] ${meeting.listing_title} 화상상담`,
+    description: `토지명: ${meeting.listing_title}\n상담일시: ${meeting.start_time}\n담당자: ${staff.nickname}`,
     startTime: meeting.start_time,
     memberEmail: member?.email || meeting.member_email,
     staffEmail: staff?.email,
@@ -2164,8 +2169,8 @@ app.put('/api/meetings/:id/status', authenticateToken, async (req, res) => {
     // Auto sync with Google Meet API if rescheduled
     const staff = inMemoryDB.users.find(u => u.user_id === req.user.id) || req.user;
     const meetResult = await createGoogleMeetEvent({
-      summary: `[스타부동산-변경] ${meeting.listing_title} 화상상담`,
-      description: `[일정변경] 매물: ${meeting.listing_title}\n신규 상담일시: ${start_time}`,
+      summary: `[한국지역개발토지분석원-변경] ${meeting.listing_title} 화상상담`,
+      description: `[일정변경] 대상 토지: ${meeting.listing_title}\n신규 상담일시: ${start_time}`,
       startTime: start_time,
       memberEmail: meeting.member_email,
       staffEmail: staff.email,
@@ -2209,7 +2214,7 @@ app.put('/api/staff/profile', authenticateToken, (req, res) => {
 // Requirement 7: Owner can see all Members full personal info, all Listings, all Staff info
 app.get('/api/owner/data', authenticateToken, (req, res) => {
   if (req.user.role !== 'OWNER' && req.user.role !== 'ADMIN') {
-    return res.status(403).json({ error: '개업공인중개사(Owner) 또는 관리자 권한이 필요합니다.' });
+    return res.status(403).json({ error: '한국지역개발토지분석원(Owner) 또는 관리자 권한이 필요합니다.' });
   }
 
   const members = inMemoryDB.users.filter(u => u.role === 'MEMBER');
