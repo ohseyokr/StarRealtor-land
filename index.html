@@ -2525,32 +2525,31 @@ ${apisListStr}
             renderGeofenceMatchedResults([]);
         }
 
+        function isListingInLayer(coords, layer) {
+            if (!layer || !coords || !coords.lat) return false;
+            const latLng = L.latLng(coords.lat, coords.lng);
+            if (layer instanceof L.Circle) {
+                return layer.getLatLng().distanceTo(latLng) <= layer.getRadius();
+            } else if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+                const pts = layer.getLatLngs();
+                for (let pt of pts) {
+                    if (pt.distanceTo(latLng) <= 250) return true;
+                }
+                return false;
+            } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+                const latLngs = layer.getLatLngs()[0];
+                const polyCoords = latLngs.map(pt => [pt.lat, pt.lng]);
+                return isPointInPolygon([coords.lat, coords.lng], polyCoords);
+            }
+            return false;
+        }
+
         function processGeofenceFilter(layer) {
             matchedGeofenceListings = [];
 
             currentListings.forEach(item => {
                 const coords = getListingLatLng(item);
-                const latLng = L.latLng(coords.lat, coords.lng);
-
-                let isInside = false;
-
-                if (layer instanceof L.Circle) {
-                    const center = layer.getLatLng();
-                    const radius = layer.getRadius();
-                    isInside = center.distanceTo(latLng) <= radius;
-                } else if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
-                    // Polyline buffer distance check (~100m)
-                    const pts = layer.getLatLngs();
-                    for (let pt of pts) {
-                        if (pt.distanceTo(latLng) <= 250) { isInside = true; break; }
-                    }
-                } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
-                    const latLngs = layer.getLatLngs()[0];
-                    const polyCoords = latLngs.map(pt => [pt.lat, pt.lng]);
-                    isInside = isPointInPolygon([coords.lat, coords.lng], polyCoords);
-                }
-
-                if (isInside) {
+                if (isListingInLayer(coords, layer)) {
                     matchedGeofenceListings.push(item);
                 }
             });
@@ -2597,12 +2596,9 @@ ${apisListStr}
 
                 // Add or update VWORLD extracted parcels into currentListings
                 if (vworldData && vworldData.extracted_parcels && Array.isArray(vworldData.extracted_parcels)) {
-                    vworldData.extracted_parcels.forEach((p, idx) => {
-                        // Ensure coords are positioned at center with slight offsets to fit inside drawn geofence
-                        const offsetLat = idx === 0 ? 0 : (idx === 1 ? 0.0001 : -0.0001);
-                        const offsetLng = idx === 0 ? 0 : (idx === 1 ? 0.0001 : -0.0001);
-                        p.lat = centerLat + offsetLat;
-                        p.lng = centerLng + offsetLng;
+                    vworldData.extracted_parcels.forEach((p) => {
+                        if (!p.lat) p.lat = centerLat;
+                        if (!p.lng) p.lng = centerLng;
 
                         const existingIdx = currentListings.findIndex(l => l.listing_id === p.listing_id);
                         if (existingIdx >= 0) {
@@ -2611,6 +2607,35 @@ ${apisListStr}
                             currentListings.unshift(p);
                         }
                     });
+                }
+
+                // Reverse geocode all listings inside the drawn geofence so their land lot addresses match VWORLD real parcels
+                const itemsInside = currentListings.filter(item => {
+                    const coords = getListingLatLng(item);
+                    return isListingInLayer(coords, drawnGeofenceLayer);
+                });
+
+                if (itemsInside.length > 0) {
+                    const pointsToQuery = itemsInside.map(item => getListingLatLng(item));
+                    const rgRes = await fetch('/api/public-land-api/reverse-geocode', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ points: pointsToQuery })
+                    });
+                    const rgData = await rgRes.json();
+                    if (rgData && rgData.success && Array.isArray(rgData.results)) {
+                        itemsInside.forEach((item, idx) => {
+                            const r = rgData.results[idx];
+                            if (r && r.sojaeji && r.jibeon) {
+                                item.sojaeji = r.sojaeji;
+                                item.jibeon = r.jibeon;
+                                item.address = `${r.sojaeji} ${r.jibeon}`;
+                                const jimok = item.jimok_official || '전';
+                                const area = item.area_sqm || 850;
+                                item.title = `(${jimok}) (${area}㎡) ${r.sojaeji} ${r.jibeon}`;
+                            }
+                        });
+                    }
                 }
 
                 refreshGeofenceListingMarkers();
