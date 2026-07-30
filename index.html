@@ -1631,52 +1631,94 @@
                             <h4 class="font-bold text-[#3A5A40] flex items-center gap-1.5">
                                 <i class="fa-solid fa-layer-group"></i> VWORLD 3대 연동 공간 지도 (연속지적도 · 항공위성 · WMS Direct)
                             </h4>
-                            <span class="text-[10px] text-stone-500 font-mono">* 오피셜 인증키(CE2C1488-****) 적용 전체 3개 도면 실시간 렌더링</span>
+                            <span class="text-[10px] text-stone-500 font-mono">* 도면 클릭 시 VWORLD 오피셜 실제 지도/위성 웹페이지가 새창으로 열립니다</span>
                         </div>
 
                         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <!-- [도면 1] Cadastral Overlay Map Container -->
-                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2 flex flex-col justify-between">
                                 <div class="flex justify-between items-center text-[11px]">
                                     <span class="font-bold text-amber-300"><i class="fa-solid fa-draw-polygon"></i> [도면 1] 연속지적도</span>
-                                    <span class="text-[9px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 border border-amber-500/30">WMS CADASTRAL</span>
+                                    <span class="text-[9px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 border border-amber-500/30 font-mono">WMS CADASTRAL</span>
                                 </div>
-                                <div class="relative h-48 bg-stone-900 border border-amber-500/30 overflow-hidden rounded flex items-center justify-center">
-                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="[도면1] 연속지적도" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
+                                <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'cadastral')" 
+                                     class="relative h-52 bg-stone-900 border border-amber-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-amber-400 transition-all flex items-center justify-center">
+                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="[도면1] 연속지적도" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
+                                    
+                                    <!-- Hover overlay to prompt popup opening -->
+                                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-2xl text-amber-300 mb-1"></i>
+                                        <span class="font-bold text-xs text-amber-200">VWORLD 연속지적도 새창 보기</span>
+                                        <span class="text-[10px] text-amber-100/80">클릭 시 VWORLD 오피셜 지도 연결</span>
+                                    </div>
                                 </div>
-                                <div class="flex justify-between items-center text-[10px] text-amber-200/80 pt-1 border-t border-white/10">
-                                    <span>필지 경계: PNU [${land.pnu}]</span>
-                                    <span>LP_PA_CBND_BUBBLE</span>
+                                <div class="space-y-1.5">
+                                    <div class="flex justify-between items-center text-[10px] text-amber-200/80 pt-1 border-t border-white/10">
+                                        <span>필지 경계: PNU [${land.pnu}]</span>
+                                        <span>LP_PA_CBND_BUBBLE</span>
+                                    </div>
+                                    <button type="button" onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'cadastral')" 
+                                            class="w-full py-1.5 px-2 bg-amber-900/90 hover:bg-amber-800 text-amber-200 text-[10px] font-bold rounded border border-amber-600/40 flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> VWORLD [도면1] 실제 지도 새창으로 열기
+                                    </button>
                                 </div>
                             </div>
 
                             <!-- [도면 2] Satellite Image View Container -->
-                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2 flex flex-col justify-between">
                                 <div class="flex justify-between items-center text-[11px]">
                                     <span class="font-bold text-emerald-300"><i class="fa-solid fa-satellite"></i> [도면 2] 항공 위성사진</span>
-                                    <span class="text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 border border-emerald-500/30">WMTS SATELLITE</span>
+                                    <span class="text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 border border-emerald-500/30 font-mono">WMTS SATELLITE</span>
                                 </div>
-                                <div class="relative h-48 bg-stone-900 border border-emerald-500/30 overflow-hidden rounded flex items-center justify-center">
-                                    <img src="${docs[1]?.url || data.map_images.satellite_map_url}" alt="[도면2] 위성사진" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.satellite_map_url}';">
+                                <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'satellite')" 
+                                     class="relative h-52 bg-stone-900 border border-emerald-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-emerald-400 transition-all flex items-center justify-center">
+                                    <img src="${docs[1]?.url || data.map_images.satellite_map_url}" alt="[도면2] 위성사진" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.satellite_map_url}';">
+                                    
+                                    <!-- Hover overlay to prompt popup opening -->
+                                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-2xl text-emerald-300 mb-1"></i>
+                                        <span class="font-bold text-xs text-emerald-200">VWORLD 항공 위성지도 새창 보기</span>
+                                        <span class="text-[10px] text-emerald-100/80">클릭 시 VWORLD 고해상도 위성 연결</span>
+                                    </div>
                                 </div>
-                                <div class="flex justify-between items-center text-[10px] text-emerald-200/80 pt-1 border-t border-white/10">
-                                    <span>위성 지형 &amp; 경계선 매핑</span>
-                                    <span>WMTS Tile Stream</span>
+                                <div class="space-y-1.5">
+                                    <div class="flex justify-between items-center text-[10px] text-emerald-200/80 pt-1 border-t border-white/10">
+                                        <span>위성 지형 &amp; 경계선 매핑</span>
+                                        <span>WMTS Tile Stream</span>
+                                    </div>
+                                    <button type="button" onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'satellite')" 
+                                            class="w-full py-1.5 px-2 bg-emerald-900/90 hover:bg-emerald-800 text-emerald-200 text-[10px] font-bold rounded border border-emerald-600/40 flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> VWORLD [도면2] 실제 위성사진 새창으로 열기
+                                    </button>
                                 </div>
                             </div>
 
                             <!-- [도면 3] VWORLD WMS Direct Endpoint Container -->
-                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2 flex flex-col justify-between">
                                 <div class="flex justify-between items-center text-[11px]">
                                     <span class="font-bold text-blue-300"><i class="fa-solid fa-network-wired"></i> [도면 3] WMS Direct</span>
-                                    <span class="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.5 border border-blue-500/30">DIRECT ENDPOINT</span>
+                                    <span class="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.5 border border-blue-500/30 font-mono">DIRECT ENDPOINT</span>
                                 </div>
-                                <div class="relative h-48 bg-stone-900 border border-blue-500/30 overflow-hidden rounded flex items-center justify-center">
-                                    <img src="${docs[2]?.url || data.map_images.land_use_plan_url}" alt="[도면3] WMS Direct Endpoint" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.land_use_plan_url}';">
+                                <div onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'wms')" 
+                                     class="relative h-52 bg-stone-900 border border-blue-500/40 overflow-hidden rounded cursor-pointer group hover:ring-2 hover:ring-blue-400 transition-all flex items-center justify-center">
+                                    <img src="${docs[2]?.url || data.map_images.land_use_plan_url}" alt="[도면3] WMS Direct Endpoint" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.onerror=null; this.src='${data.map_images.land_use_plan_url}';">
+                                    
+                                    <!-- Hover overlay to prompt popup opening -->
+                                    <div class="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity p-2 text-center text-white">
+                                        <i class="fa-solid fa-arrow-up-right-from-square text-2xl text-blue-300 mb-1"></i>
+                                        <span class="font-bold text-xs text-blue-200">VWORLD 토지이용 규제지도 새창 보기</span>
+                                        <span class="text-[10px] text-blue-100/80">클릭 시 VWORLD WMS 엔드포인트 연결</span>
+                                    </div>
                                 </div>
-                                <div class="flex justify-between items-center text-[10px] text-blue-200/80 pt-1 border-t border-white/10">
-                                    <span>토지이용 규제지구도</span>
-                                    <span>LAYERS=LT_C_UQ111</span>
+                                <div class="space-y-1.5">
+                                    <div class="flex justify-between items-center text-[10px] text-blue-200/80 pt-1 border-t border-white/10">
+                                        <span>토지이용 규제지구도</span>
+                                        <span>LAYERS=LT_C_UQ111</span>
+                                    </div>
+                                    <button type="button" onclick="openVworldOfficialMap('${land.address}', '${land.pnu}', ${coords.lat}, ${coords.lng}, 'wms')" 
+                                            class="w-full py-1.5 px-2 bg-blue-900/90 hover:bg-blue-800 text-blue-200 text-[10px] font-bold rounded border border-blue-600/40 flex items-center justify-center gap-1">
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> VWORLD [도면3] 토지이용계획 새창으로 열기
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -1732,6 +1774,31 @@
                         <strong>[VWORLD API 조회 실패]</strong> ${err.message}
                     </div>
                 `;
+            }
+        }
+
+        function openVworldOfficialMap(address, pnu, lat, lng, mapType) {
+            const cleanAddr = (address || '강원특별자치도 평창군 대관령면 수하리 산 45-2').trim();
+            const encodedAddress = encodeURIComponent(cleanAddr);
+            
+            // Construct VWORLD official web page URL with location search / map mode
+            let targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}`;
+            if (mapType === 'satellite') {
+                targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}&mode=satellite`;
+            } else if (mapType === 'wms') {
+                targetUrl = `https://map.vworld.kr/map/ws.do?q=${encodedAddress}&pnu=${pnu || ''}`;
+            }
+
+            const width = 1280;
+            const height = 850;
+            const left = Math.max(0, Math.round((screen.width - width) / 2));
+            const top = Math.max(0, Math.round((screen.height - height) / 2));
+            
+            const win = window.open(targetUrl, 'VWORLD_MAP_POPUP_' + Date.now(), `width=${width},height=${height},top=${top},left=${left},resizable=yes,scrollbars=yes,status=yes`);
+            if (win) {
+                win.focus();
+            } else {
+                window.open(targetUrl, '_blank');
             }
         }
 
