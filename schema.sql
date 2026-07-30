@@ -1,5 +1,5 @@
 -- ====================================================================
--- StarRealtor Land Brokerage Platform (스타공인중개사 토지 중개 플랫폼) v4
+-- StarRealtor Land Brokerage Platform (스타공인중개사 토지 중개 플랫폼) v5
 -- PostgreSQL Relational Database Physical Schema
 -- Supported Target: PostgreSQL v14+ / Render Cloud PostgreSQL
 -- ====================================================================
@@ -7,6 +7,7 @@
 -- Drop existing tables if re-initializing
 DROP TABLE IF EXISTS TB_AUDIT_LOG CASCADE;
 DROP TABLE IF EXISTS TB_RESTRICTED_ZONE_LOG CASCADE;
+DROP TABLE IF EXISTS TB_VWORLD_API_LOG CASCADE;
 DROP TABLE IF EXISTS TB_PDF_DOWNLOAD_LOG CASCADE;
 DROP TABLE IF EXISTS TB_STAFF_PROFILE CASCADE;
 DROP TABLE IF EXISTS TB_MEET_SCHEDULE CASCADE;
@@ -16,7 +17,7 @@ DROP TABLE IF EXISTS TB_LAND_LISTING CASCADE;
 DROP TABLE IF EXISTS TB_USER CASCADE;
 DROP TABLE IF EXISTS TB_OWNER_CONFIG CASCADE;
 
--- 1. Owner Legal Metadata Table (공인중개사법 제18조의2 헤더/푸터 동적 공시)
+-- 1. Owner Legal Metadata Table (공인중개사법 제18조의2 헤더/푸터 동적 공시 및 VWORLD 오피셜 개발키 관리)
 CREATE TABLE TB_OWNER_CONFIG (
     config_id VARCHAR(50) PRIMARY KEY DEFAULT 'cfg-1',
     office_name VARCHAR(150) NOT NULL DEFAULT '스타공인중개사사무소',
@@ -28,6 +29,7 @@ CREATE TABLE TB_OWNER_CONFIG (
     landline_phone VARCHAR(30) NOT NULL DEFAULT '02-1234-5678',
     fax_num VARCHAR(30) NOT NULL DEFAULT '02-1234-5679',
     email VARCHAR(100) NOT NULL DEFAULT 'owner@starrealtor-land.co.kr',
+    vworld_api_key VARCHAR(100) NOT NULL DEFAULT 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3',
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -43,7 +45,7 @@ CREATE TABLE TB_USER (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 3. Land Listings Table (28개 지목 및 PDF/YouTube 지원)
+-- 3. Land Listings Table (28개 지목, 승인워크플로우, PDF/YouTube 및 VWORLD 좌표 지원)
 CREATE TABLE TB_LAND_LISTING (
     listing_id VARCHAR(50) PRIMARY KEY,
     assistant_id VARCHAR(50) REFERENCES TB_USER(user_id) ON DELETE SET NULL,
@@ -59,6 +61,11 @@ CREATE TABLE TB_LAND_LISTING (
     doc_ledger_pdf_url TEXT DEFAULT '',
     doc_cadastral_pdf_url TEXT DEFAULT '',
     listing_status VARCHAR(20) DEFAULT 'ACTIVE' CHECK (listing_status IN ('ACTIVE', 'PENDING', 'SOLD', 'INACTIVE')),
+    approval_status VARCHAR(30) DEFAULT 'APPROVED' CHECK (approval_status IN ('APPROVED', 'PENDING_REGISTRATION', 'PENDING_MODIFICATION', 'PENDING_DELETION', 'REJECTED')),
+    approval_requests JSONB DEFAULT '[]'::jsonb,
+    lat NUMERIC(10, 6) DEFAULT 37.6651,
+    lng NUMERIC(10, 6) DEFAULT 128.7182,
+    pnu_code VARCHAR(30) DEFAULT '4276033022200450002',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -82,7 +89,7 @@ CREATE TABLE TB_PAYMENT_LOG (
     paid_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 6. Google Meet Meetings Schedule Table (화상 미팅 일정)
+-- 6. Google Meet Meetings Schedule Table (화상 미팅 일정 및 히스토리 로그)
 CREATE TABLE TB_MEET_SCHEDULE (
     meeting_id VARCHAR(50) PRIMARY KEY,
     listing_id VARCHAR(50) REFERENCES TB_LAND_LISTING(listing_id) ON DELETE CASCADE,
@@ -91,8 +98,10 @@ CREATE TABLE TB_MEET_SCHEDULE (
     google_event_id VARCHAR(100) DEFAULT '',
     meet_link TEXT NOT NULL,
     start_time VARCHAR(50) NOT NULL,
-    status VARCHAR(20) DEFAULT 'CONFIRMED' CHECK (status IN ('PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED_REFUNDED')),
+    status VARCHAR(50) DEFAULT 'CONFIRMED',
+    amount NUMERIC(12, 0) DEFAULT 50000,
     payment_id VARCHAR(50) REFERENCES TB_PAYMENT_LOG(payment_id) ON DELETE SET NULL,
+    history JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -115,7 +124,19 @@ CREATE TABLE TB_PDF_DOWNLOAD_LOG (
     downloaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. Restricted Zone Attempt Log Table (3대 고위험 규제 지역 시도)
+-- 9. VWORLD 14개 전체 Open API Mypage 조회 및 다운로드 감사 로그 Table
+CREATE TABLE TB_VWORLD_API_LOG (
+    log_id VARCHAR(50) PRIMARY KEY,
+    user_id VARCHAR(50) REFERENCES TB_USER(user_id) ON DELETE CASCADE,
+    user_role VARCHAR(20) NOT NULL,
+    target_address VARCHAR(255) NOT NULL,
+    pnu_code VARCHAR(30) DEFAULT '',
+    api_categories_queried TEXT DEFAULT '3D지도,2D지도,WMS연속지적,WMTS위성,Geocoder,2D데이터,StaticMap',
+    report_downloaded BOOLEAN DEFAULT FALSE,
+    accessed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 10. Restricted Zone Attempt Log Table (3대 고위험 규제 지역 시도)
 CREATE TABLE TB_RESTRICTED_ZONE_LOG (
     log_id VARCHAR(50) PRIMARY KEY,
     attempted_address VARCHAR(255) NOT NULL,
@@ -125,7 +146,7 @@ CREATE TABLE TB_RESTRICTED_ZONE_LOG (
     attempted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 10. Audit Log Table
+-- 11. Audit Log Table
 CREATE TABLE TB_AUDIT_LOG (
     audit_id VARCHAR(50) PRIMARY KEY,
     user_id VARCHAR(50) REFERENCES TB_USER(user_id) ON DELETE CASCADE,
@@ -141,17 +162,19 @@ CREATE INDEX idx_user_email ON TB_USER(email);
 CREATE INDEX idx_user_role ON TB_USER(role);
 CREATE INDEX idx_listing_jimok ON TB_LAND_LISTING(jimok_official);
 CREATE INDEX idx_listing_status ON TB_LAND_LISTING(listing_status);
+CREATE INDEX idx_listing_approval ON TB_LAND_LISTING(approval_status);
 CREATE INDEX idx_cart_member ON TB_CART(member_id);
 CREATE INDEX idx_meet_member ON TB_MEET_SCHEDULE(member_id);
 CREATE INDEX idx_meet_assistant ON TB_MEET_SCHEDULE(assistant_id);
+CREATE INDEX idx_vworld_log_user ON TB_VWORLD_API_LOG(user_id);
 
 -- ====================================================================
 -- INITIAL SEED DATA
 -- ====================================================================
 
 -- 1. Default Owner Config
-INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email)
-VALUES ('cfg-1', '스타공인중개사사무소', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr')
+INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email, vworld_api_key)
+VALUES ('cfg-1', '스타공인중개사사무소', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr', 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3')
 ON CONFLICT (config_id) DO NOTHING;
 
 -- 2. Seed Users (Disabled)
