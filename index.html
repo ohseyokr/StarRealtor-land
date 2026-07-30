@@ -2249,6 +2249,9 @@ ${apisListStr}
             if (item.spatial_coords && item.spatial_coords.lat) {
                 return { lat: Number(item.spatial_coords.lat), lng: Number(item.spatial_coords.lng) };
             }
+            if (item.coordinates && item.coordinates.lat) {
+                return { lat: Number(item.coordinates.lat), lng: Number(item.coordinates.lng) };
+            }
             const addr = item.address || item.title || '';
             if (addr.includes('평창')) return { lat: 37.6651, lng: 128.7182 };
             if (addr.includes('당진')) return { lat: 36.8921, lng: 126.7112 };
@@ -2256,6 +2259,14 @@ ${apisListStr}
             if (addr.includes('포천') && addr.includes('가양')) return { lat: 37.9823, lng: 127.1845 };
             if (addr.includes('포천') && addr.includes('마명')) return { lat: 37.7923, lng: 127.2456 };
             if (addr.includes('양주')) return { lat: 37.8212, lng: 127.0612 };
+            if (addr.includes('고양') || addr.includes('행주')) return { lat: 37.5985, lng: 126.8205 };
+            if (addr.includes('서초') || addr.includes('내곡')) return { lat: 37.4582, lng: 127.0512 };
+            if (addr.includes('마포') || addr.includes('상암')) return { lat: 37.5781, lng: 126.8912 };
+            if (addr.includes('김포') || addr.includes('고촌')) return { lat: 37.6012, lng: 126.7612 };
+            if (addr.includes('부산') || addr.includes('강서')) return { lat: 35.1812, lng: 128.9512 };
+            if (addr.includes('대구') || addr.includes('달성')) return { lat: 35.8512, lng: 128.4812 };
+            if (addr.includes('광주') || addr.includes('광산')) return { lat: 35.1512, lng: 126.7512 };
+            if (addr.includes('제주') || addr.includes('애월')) return { lat: 33.4512, lng: 126.3212 };
             return { lat: 37.5665, lng: 126.9780 };
         }
 
@@ -2375,7 +2386,7 @@ ${apisListStr}
                     const btnConfirm = document.getElementById('btn-vworld-confirm');
                     if (btnConfirm) btnConfirm.disabled = false;
 
-                    processGeofenceFilter(layer);
+                    confirmGeofenceVWorldAnalysis();
                 });
 
                 landingMap.on(L.Draw.Event.EDITED, function () {
