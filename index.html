@@ -97,7 +97,7 @@
             <div>
                 <h1 class="text-[10px] tracking-widest uppercase font-semibold text-black/40 mb-0.5">Premium Land Brokerage Platform</h1>
                 <div class="flex items-baseline gap-4">
-                    <span class="text-xl font-serif italic font-bold text-[#3A5A40] cursor-pointer" onclick="showHomeView()">한국지역개발토지분석원</span>
+                    <span class="text-xl font-serif italic font-bold text-[#3A5A40] cursor-pointer" id="header-office-name" onclick="showHomeView()">한국지역개발토지분석원</span>
                     <span class="text-xs text-black/50 hidden lg:inline">| 대표유선: <strong class="text-[#3A5A40]" id="header-landline-phone">02-1234-5678</strong></span>
                 </div>
             </div>
@@ -912,20 +912,32 @@
         }
 
         function updateLegalHeaderFooterUI(config) {
-            if (!config || !config.office_name) return;
+            if (!config || typeof config !== 'object') return;
             // Header
-            document.getElementById('header-office-name').innerText = `기관: ${config.office_name}`;
-            document.getElementById('header-landline-phone').innerText = config.landline_phone || '02-1234-5678';
+            const headerOfficeEl = document.getElementById('header-office-name');
+            if (headerOfficeEl) headerOfficeEl.innerText = config.office_name || '한국지역개발토지분석원';
+            const headerLandlineEl = document.getElementById('header-landline-phone');
+            if (headerLandlineEl) headerLandlineEl.innerText = config.landline_phone || '02-1234-5678';
+
             // Footer
-            document.getElementById('footer-office-name').innerText = config.office_name;
-            document.getElementById('footer-owner-name').innerText = config.owner_name;
-            document.getElementById('footer-address').innerText = config.address;
-            document.getElementById('footer-biz-num').innerText = config.business_reg_num;
-            document.getElementById('footer-license-num').innerText = config.license_num;
-            document.getElementById('footer-mobile-phone').innerText = config.mobile_phone;
-            document.getElementById('footer-landline-phone').innerText = config.landline_phone;
-            document.getElementById('footer-fax-num').innerText = config.fax_num;
-            document.getElementById('footer-email').innerText = config.email;
+            const footerOfficeEl = document.getElementById('footer-office-name');
+            if (footerOfficeEl) footerOfficeEl.innerText = config.office_name || '한국지역개발토지분석원';
+            const footerOwnerEl = document.getElementById('footer-owner-name');
+            if (footerOwnerEl) footerOwnerEl.innerText = config.owner_name || '';
+            const footerAddrEl = document.getElementById('footer-address');
+            if (footerAddrEl) footerAddrEl.innerText = config.address || '';
+            const footerBizEl = document.getElementById('footer-biz-num');
+            if (footerBizEl) footerBizEl.innerText = config.business_reg_num || '';
+            const footerLicEl = document.getElementById('footer-license-num');
+            if (footerLicEl) footerLicEl.innerText = config.license_num || '';
+            const footerMobEl = document.getElementById('footer-mobile-phone');
+            if (footerMobEl) footerMobEl.innerText = config.mobile_phone || '';
+            const footerLandlineEl = document.getElementById('footer-landline-phone');
+            if (footerLandlineEl) footerLandlineEl.innerText = config.landline_phone || '';
+            const footerFaxEl = document.getElementById('footer-fax-num');
+            if (footerFaxEl) footerFaxEl.innerText = config.fax_num || '';
+            const footerEmailEl = document.getElementById('footer-email');
+            if (footerEmailEl) footerEmailEl.innerText = config.email || '';
         }
 
         function init28JimokTags() {
@@ -3526,20 +3538,23 @@ ${apisListStr}
             };
 
             try {
+                const token = currentUser ? currentUser.token : (localStorage.getItem('proptech_token') || '');
                 const res = await fetch('/api/config', {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${currentUser.token}`
+                        'Authorization': `Bearer ${token}`
                     },
                     body: JSON.stringify(configData)
                 });
                 const data = await res.json();
-                ownerConfig = data.config;
+                if (!res.ok) throw new Error(data.error || '설정 저장 실패');
+                
+                ownerConfig = data.config || configData;
                 updateLegalHeaderFooterUI(ownerConfig);
                 alert('한국지역개발토지분석원 메타데이터가 플랫폼 전역 Header 및 Footer에 실시간으로 업데이트 되었습니다!');
             } catch (err) {
-                alert('저장 실패');
+                alert(`저장 실패: ${err.message || '서버 응답 오류'}`);
             }
         }
 
