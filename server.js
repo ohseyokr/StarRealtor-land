@@ -1250,16 +1250,34 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       <text x="25" y="426" fill="#60A5FA" font-size="9" font-family="monospace">LAYERS=LP_PA_CBND_BUBBLE,LT_C_UQ111 &amp; CRS=EPSG:3857 &amp; KEY=${vworldApiKey.substring(0,6)}****</text>
     </svg>`;
 
-    const cadastralDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgCadastral);
-    const satelliteDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgSatellite);
-    const wmsDirectDataUrl = 'data:image/svg+xml;utf8,' + encodeURIComponent(svgWmsDirect);
+    const cadastralDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svgCadastral).toString('base64');
+    const satelliteDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svgSatellite).toString('base64');
+    const wmsDirectDataUrl = 'data:image/svg+xml;base64,' + Buffer.from(svgWmsDirect).toString('base64');
+
+    // EPSG:3857 Web Mercator coordinate calculation
+    const mercX = Math.round((lng * 20037508.34) / 180);
+    let mercY = Math.log(Math.tan(((90 + lat) * Math.PI) / 360)) / (Math.PI / 180);
+    mercY = Math.round((mercY * 20037508.34) / 180);
+    const delta = 300; // 600m window
+    const bbox = `${mercX - delta},${mercY - delta},${mercX + delta},${mercY + delta}`;
 
     // Map imagery endpoints (VWorld WMS & Satellite images with guaranteed fallbacks)
     const mapImages = {
       cadastral_map_url: cadastralDataUrl,
       satellite_map_url: satelliteDataUrl,
       land_use_plan_url: wmsDirectDataUrl,
-      vworld_wms_direct_endpoint: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LP_PA_CBND_BUBBLE,LT_C_UQ111&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=14130000,4510000,14135000,4515000&WIDTH=600&HEIGHT=450&FORMAT=image/png&KEY=${vworldApiKey}`
+      vworld_wms_direct_endpoint: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LP_PA_CBND_BUBBLE,LT_C_UQ111&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=800&HEIGHT=600&FORMAT=image/png&KEY=${vworldApiKey}`,
+      vworld_wms_cadastral_live: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=800&HEIGHT=600&FORMAT=image/png&KEY=${vworldApiKey}`,
+      vworld_wms_satellite_live: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=Satellite,LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=800&HEIGHT=600&FORMAT=image/png&KEY=${vworldApiKey}`
+    };
+
+    const vworldOfficialLinks = {
+      vworld_web_map: `https://map.vworld.kr/map/maps.do`,
+      vworld_wms_cadastral: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=1024&HEIGHT=768&FORMAT=image/png&KEY=${vworldApiKey}`,
+      vworld_wms_satellite: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=Satellite,LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=1024&HEIGHT=768&FORMAT=image/png&KEY=${vworldApiKey}`,
+      vworld_wms_landuse: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LT_C_UQ111,LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=1024&HEIGHT=768&FORMAT=image/png&KEY=${vworldApiKey}`,
+      eum_land_info: `https://www.eum.go.kr/web/ar/lu/luLandDet.do?isvel=Y&selType=address&pnu=${pnuCode}`,
+      kakao_map: `https://map.kakao.com/?q=${encodeURIComponent(targetAddress)}`
     };
 
     res.json({
@@ -1268,11 +1286,13 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       pnu: pnuCode,
       vworld_api_key_status: 'AUTHENTICATED_OK',
       vworld_key_used: vworldApiKey.substring(0, 8) + '****',
+      vworld_official_links: vworldOfficialLinks,
       coordinates: {
         lat: lat,
         lng: lng,
-        epsg3857_x: Math.round(lng * 111319.49),
-        epsg3857_y: Math.round(lat * 111319.49)
+        epsg3857_x: mercX,
+        epsg3857_y: mercY,
+        bbox_epsg3857: bbox
       },
       user: {
         id: req.user.id,
