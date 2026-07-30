@@ -1625,43 +1625,58 @@
                         </button>
                     </div>
 
-                    <!-- TAB 1: MAPS & IMAGERY -->
+                    <!-- TAB 1: MAPS & IMAGERY (3 MAPS: Cadastral, Satellite, Direct WMS) -->
                     <div id="vworld-subtab-maps" class="space-y-3">
                         <div class="flex justify-between items-center text-xs">
                             <h4 class="font-bold text-[#3A5A40] flex items-center gap-1.5">
-                                <i class="fa-solid fa-layer-group"></i> VWORLD WMS 연속지적도 & 항공 위성 오버레이
+                                <i class="fa-solid fa-layer-group"></i> VWORLD 3대 연동 공간 지도 (연속지적도 · 항공위성 · WMS Direct)
                             </h4>
-                            <span class="text-[10px] text-stone-500 font-mono">* 이미지 로드 오류 방지 및 데이터 무결성 보증 적용</span>
+                            <span class="text-[10px] text-stone-500 font-mono">* 오피셜 인증키(CE2C1488-****) 적용 전체 3개 도면 실시간 렌더링</span>
                         </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            <!-- Cadastral Overlay Map Container -->
-                            <div class="bg-[#131B1E] p-3 text-white rounded border border-black/20 space-y-2">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <!-- [도면 1] Cadastral Overlay Map Container -->
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
                                 <div class="flex justify-between items-center text-[11px]">
-                                    <span class="font-bold text-amber-300"><i class="fa-solid fa-draw-polygon"></i> 연속지적도 (WMS Cadastral Layer)</span>
-                                    <span class="text-[9px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 border border-amber-500/30">VWORLD 2D/3D TILE</span>
+                                    <span class="font-bold text-amber-300"><i class="fa-solid fa-draw-polygon"></i> [도면 1] 연속지적도</span>
+                                    <span class="text-[9px] bg-amber-900/80 text-amber-200 px-1.5 py-0.5 border border-amber-500/30">WMS CADASTRAL</span>
                                 </div>
-                                <div class="relative h-56 bg-stone-900 border border-amber-500/30 overflow-hidden rounded flex items-center justify-center">
-                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="연속지적도" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
+                                <div class="relative h-48 bg-stone-900 border border-amber-500/30 overflow-hidden rounded flex items-center justify-center">
+                                    <img id="vworld-cadastral-img" src="${docs[0]?.url || data.map_images.cadastral_map_url}" alt="[도면1] 연속지적도" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.cadastral_map_url}';">
                                 </div>
                                 <div class="flex justify-between items-center text-[10px] text-amber-200/80 pt-1 border-t border-white/10">
-                                    <span>필지 경계선: PNU [${land.pnu}]</span>
-                                    <span>WMS: LP_PA_CBND_BUBBLE</span>
+                                    <span>필지 경계: PNU [${land.pnu}]</span>
+                                    <span>LP_PA_CBND_BUBBLE</span>
                                 </div>
                             </div>
 
-                            <!-- Satellite Image View Container -->
-                            <div class="bg-[#131B1E] p-3 text-white rounded border border-black/20 space-y-2">
+                            <!-- [도면 2] Satellite Image View Container -->
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
                                 <div class="flex justify-between items-center text-[11px]">
-                                    <span class="font-bold text-emerald-300"><i class="fa-solid fa-satellite"></i> 토지 현황 항공 위성사진</span>
-                                    <span class="text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 border border-emerald-500/30">HIGH-RES SATELLITE</span>
+                                    <span class="font-bold text-emerald-300"><i class="fa-solid fa-satellite"></i> [도면 2] 항공 위성사진</span>
+                                    <span class="text-[9px] bg-emerald-900/80 text-emerald-200 px-1.5 py-0.5 border border-emerald-500/30">WMTS SATELLITE</span>
                                 </div>
-                                <div class="relative h-56 bg-stone-900 border border-emerald-500/30 overflow-hidden rounded flex items-center justify-center">
-                                    <img src="${docs[1]?.url || 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=800&q=80'}" alt="위성사진" class="w-full h-full object-cover">
+                                <div class="relative h-48 bg-stone-900 border border-emerald-500/30 overflow-hidden rounded flex items-center justify-center">
+                                    <img src="${docs[1]?.url || data.map_images.satellite_map_url}" alt="[도면2] 위성사진" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.satellite_map_url}';">
                                 </div>
                                 <div class="flex justify-between items-center text-[10px] text-emerald-200/80 pt-1 border-t border-white/10">
-                                    <span>현황 도로 및 주변 지형 매핑</span>
+                                    <span>위성 지형 &amp; 경계선 매핑</span>
                                     <span>WMTS Tile Stream</span>
+                                </div>
+                            </div>
+
+                            <!-- [도면 3] VWORLD WMS Direct Endpoint Container -->
+                            <div class="bg-[#131B1E] p-2.5 text-white rounded border border-black/20 space-y-2">
+                                <div class="flex justify-between items-center text-[11px]">
+                                    <span class="font-bold text-blue-300"><i class="fa-solid fa-network-wired"></i> [도면 3] WMS Direct</span>
+                                    <span class="text-[9px] bg-blue-900/80 text-blue-200 px-1.5 py-0.5 border border-blue-500/30">DIRECT ENDPOINT</span>
+                                </div>
+                                <div class="relative h-48 bg-stone-900 border border-blue-500/30 overflow-hidden rounded flex items-center justify-center">
+                                    <img src="${docs[2]?.url || data.map_images.land_use_plan_url}" alt="[도면3] WMS Direct Endpoint" class="w-full h-full object-contain" onerror="this.onerror=null; this.src='${data.map_images.land_use_plan_url}';">
+                                </div>
+                                <div class="flex justify-between items-center text-[10px] text-blue-200/80 pt-1 border-t border-white/10">
+                                    <span>토지이용 규제지구도</span>
+                                    <span>LAYERS=LT_C_UQ111</span>
                                 </div>
                             </div>
                         </div>
