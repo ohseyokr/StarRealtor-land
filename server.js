@@ -1231,50 +1231,114 @@ app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
 app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
   try {
     const { address, listing_id } = req.body;
-    let targetAddress = address ? address.trim() : '';
+    let rawAddress = address ? address.trim() : '';
 
-    if (!targetAddress && listing_id) {
-      const listing = inMemoryDB.listings.find(l => l.listing_id === listing_id);
-      if (listing) {
-        targetAddress = listing.address;
-      }
+    let matchedListing = null;
+    if (listing_id) {
+      matchedListing = inMemoryDB.listings.find(l => l.listing_id === listing_id);
     }
 
-    if (!targetAddress) {
+    if (!rawAddress && matchedListing) {
+      rawAddress = matchedListing.address;
+    }
+
+    if (!rawAddress) {
       return res.status(400).json({ error: '조회할 토지 지번 주소를 입력해주세요.' });
     }
 
-    const vworldApiKey = process.env.VWORLD_API_KEY || process.env.VWORLD_KEY || 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
+    // Clean title prefix like '(잡종지) (1,100㎡) 경기도 고양시 덕양구 행주외동 129-1번지'
+    let cleanTargetAddr = rawAddress.replace(/^\([^)]+\)\s*\([^)]+\)\s*/, '').trim();
 
-    // Calculate PNU based on address
-    let pnuCode = '4146110200100780001';
-    let lat = 37.2345;
-    let lng = 127.2341;
-    if (targetAddress.includes('평창')) {
-      pnuCode = '4276033022200450002';
-      lat = 37.6651; lng = 128.7182;
-    } else if (targetAddress.includes('당진')) {
-      pnuCode = '4427034021101230005';
-      lat = 36.8921; lng = 126.7112;
-    } else if (targetAddress.includes('포천')) {
-      pnuCode = '4165033023103690006';
-      lat = 37.9123; lng = 127.2145;
-    } else if (targetAddress.includes('용인')) {
-      pnuCode = '4146110200100780088';
-      lat = 37.2348; lng = 127.2891;
+    if (!matchedListing && cleanTargetAddr) {
+      matchedListing = inMemoryDB.listings.find(l => l.address === cleanTargetAddr || (l.title && l.title.includes(cleanTargetAddr)));
     }
 
+    let jimok = '전';
+    let zoning = '계획관리지역';
     let officialPrice = 125000;
-    if (targetAddress.includes('용인') || targetAddress.includes('양주')) officialPrice = 850000;
-    else if (targetAddress.includes('평창')) officialPrice = 45000;
+    let areaSqm = 850;
+    let lat = 37.5985;
+    let lng = 126.8205;
+    let sojaeji = '경기도 고양시 덕양구 행주외동';
+    let jibeon = '129-1번지';
 
-    let jimok = targetAddress.includes('산') || targetAddress.includes('임야') ? '임' : (targetAddress.includes('양지') || targetAddress.includes('고암') ? '대' : '전');
-    let zoning = targetAddress.includes('평창') ? '보전관리지역' : (targetAddress.includes('용인') ? '제1종일반주거지역' : '계획관리지역');
+    if (matchedListing) {
+      cleanTargetAddr = matchedListing.address || cleanTargetAddr;
+      jimok = matchedListing.jimok_official || '대';
+      zoning = matchedListing.zoning_district || '계획관리지역';
+      officialPrice = matchedListing.official_land_price_sqm || 125000;
+      areaSqm = matchedListing.area_sqm || 850;
+      lat = Number(matchedListing.lat) || 37.5985;
+      lng = Number(matchedListing.lng) || 126.8205;
+      sojaeji = matchedListing.sojaeji || '경기도 고양시 덕양구 행주외동';
+      jibeon = matchedListing.jibeon || '129-1번지';
+    } else {
+      const jibunMatch = cleanTargetAddr.match(/(산\s*\d+(?:-\d+)?번지|\d+(?:-\d+)?번지)/);
+      if (jibunMatch) {
+        jibeon = jibunMatch[0];
+        sojaeji = cleanTargetAddr.replace(jibeon, '').trim();
+      } else {
+        const parts = cleanTargetAddr.split(' ');
+        jibeon = parts.pop() || '129-1번지';
+        sojaeji = parts.join(' ') || '경기도 고양시 덕양구 행주외동';
+      }
 
-    // Generate safe, crisp SVG Cadastral Map Data URL (Continuity Cadastral Map WMS overlay simulation)
-    const lotJibun = targetAddress.split(' ').pop() || '45-2';
-    
-    // [도면 1] 연속지적도 SVG (VWORLD WMS Cadastral Layer over Map Base - Pure Self-Contained SVG)
+      if (rawAddress.includes('잡종지') || cleanTargetAddr.includes('잡종지')) jimok = '잡종지';
+      else if (rawAddress.includes('대') || cleanTargetAddr.includes('대지')) jimok = '대';
+      else if (rawAddress.includes('답') || cleanTargetAddr.includes('논')) jimok = '답';
+      else if (rawAddress.includes('산') || rawAddress.includes('임') || cleanTargetAddr.includes('임야')) jimok = '임';
+
+      const areaMatch = rawAddress.match(/\(([0-9,]+)㎡\)/);
+      if (areaMatch && areaMatch[1]) {
+        areaSqm = parseInt(areaMatch[1].replace(/,/g, ''), 10) || 850;
+      }
+
+      if (cleanTargetAddr.includes('평창')) zoning = '보전관리지역';
+      else if (cleanTargetAddr.includes('용인') || cleanTargetAddr.includes('양주')) zoning = '제1종일반주거지역';
+
+      if (cleanTargetAddr.includes('용인') || cleanTargetAddr.includes('양주')) officialPrice = 850000;
+      else if (cleanTargetAddr.includes('평창')) officialPrice = 45000;
+    }
+
+    const isSan = jibeon.includes('산');
+    const numMatches = jibeon.match(/\d+/g) || ['129', '1'];
+    const baseNum = parseInt(numMatches[0], 10) || 129;
+    const subNum = numMatches[1] ? parseInt(numMatches[1], 10) : 0;
+
+    let regCode = '4128110600'; // Default Goyang Deogyang-gu Haengjuoe-dong
+    if (cleanTargetAddr.includes('평창')) {
+      regCode = '4276033022';
+      lat = 37.6651; lng = 128.7182;
+    } else if (cleanTargetAddr.includes('당진')) {
+      regCode = '4427034021';
+      lat = 36.8921; lng = 126.7112;
+    } else if (cleanTargetAddr.includes('포천')) {
+      regCode = '4165033023';
+      lat = 37.9123; lng = 127.2145;
+    } else if (cleanTargetAddr.includes('용인')) {
+      regCode = '4146110200';
+      lat = 37.2348; lng = 127.2891;
+    } else if (cleanTargetAddr.includes('양주')) {
+      regCode = '4163010400';
+      lat = 37.8212; lng = 127.0612;
+    } else if (cleanTargetAddr.includes('행주외동') || cleanTargetAddr.includes('고양')) {
+      regCode = '4128110600';
+      lat = 37.5985;
+      lng = 126.8205;
+    }
+
+    const pnuCode = `${regCode}${isSan ? '2' : '1'}${String(baseNum).padStart(4, '0')}${String(subNum).padStart(4, '0')}`;
+
+    // Compute surrounding parcel labels based on target land
+    const surr1 = isSan ? `산 ${Math.max(1, baseNum-1)} 전` : (subNum > 0 ? `${baseNum} 전` : `${Math.max(1, baseNum-1)} 전`);
+    const surr2 = isSan ? `산 ${baseNum} 답` : (subNum > 0 ? `${baseNum}-${subNum+1} 답` : `${baseNum}-1 답`);
+    const surr3 = isSan ? `산 ${baseNum+1} 대` : `${baseNum+1} 대`;
+    const surr4 = isSan ? `산 ${baseNum+2} 임` : `${baseNum+2} 잡종지`;
+    const roadName = isSan ? `소로 4m 임도` : `소로 8m 포장도로 (${sojaeji.split(' ').pop() || '진입로'})`;
+
+    const vworldApiKey = process.env.VWORLD_API_KEY || process.env.VWORLD_KEY || 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
+
+    // [도면 1] 연속지적도 SVG (VWORLD WMS Cadastral Layer over Map Base)
     const svgCadastral = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450" style="background:#131B1E;">
       <defs>
         <pattern id="grid1" width="30" height="30" patternUnits="userSpaceOnUse">
@@ -1298,18 +1362,18 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
 
       <!-- Surrounding Parcels -->
       <polygon points="40,50 200,30 220,160 30,170" fill="#202D33" fill-opacity="0.85" stroke="#607D8B" stroke-width="1.5"/>
-      <text x="110" y="100" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 45-1 전</text>
+      <text x="110" y="100" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${surr1}</text>
 
       <polygon points="200,30 450,20 480,150 220,160" fill="#202D33" fill-opacity="0.85" stroke="#607D8B" stroke-width="1.5"/>
-      <text x="330" y="85" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 44 답</text>
+      <text x="330" y="85" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${surr2}</text>
 
       <polygon points="450,20 570,30 580,220 480,150" fill="#202D33" fill-opacity="0.85" stroke="#607D8B" stroke-width="1.5"/>
-      <text x="520" y="110" fill="#ECEFF1" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 43 대</text>
+      <text x="520" y="110" fill="#ECEFF1" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">${surr3}</text>
 
       <!-- Road (구거/도로) -->
       <polygon points="30,170 220,160 210,210 20,220" fill="#37474F" fill-opacity="0.95" stroke="#546E7A" stroke-width="1.5"/>
       <path d="M 25 195 L 215 185" stroke="#FFD54F" stroke-width="1.5" stroke-dasharray="6 4"/>
-      <text x="100" y="193" fill="#FFD54F" font-size="10" font-weight="bold" font-family="sans-serif">소로 4m 포장도로</text>
+      <text x="100" y="193" fill="#FFD54F" font-size="10" font-weight="bold" font-family="sans-serif">${roadName}</text>
 
       <!-- Target Parcel Polygon (HIGHLIGHTED) -->
       <polygon points="210,210 490,190 520,380 180,410" fill="url(#targetGrad1)"/>
@@ -1318,12 +1382,12 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       
       <!-- Target Label Marker -->
       <circle cx="345" cy="300" r="28" fill="#1A237E" stroke="#FFD54F" stroke-width="2.5"/>
-      <text x="345" y="296" fill="#FFEB3B" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
-      <text x="345" y="313" fill="#FFFFFF" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">(${jimok}) [대상필지]</text>
+      <text x="345" y="296" fill="#FFEB3B" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${jibeon}</text>
+      <text x="345" y="313" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">(${jimok}) [대상필지]</text>
 
       <!-- Surrounding Neighbor 2 -->
       <polygon points="20,220 210,210 180,410 10,400" fill="#202D33" fill-opacity="0.85" stroke="#607D8B" stroke-width="1.5"/>
-      <text x="100" y="310" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 46 임</text>
+      <text x="100" y="310" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${surr4}</text>
 
       <!-- North Arrow & Compass -->
       <g transform="translate(540, 70)">
@@ -1375,9 +1439,9 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
 
       <!-- Pin Badge Marker -->
       <g filter="url(#shadow2)">
-        <circle cx="345" cy="300" r="26" fill="#000000" fill-opacity="0.85" stroke="#00E676" stroke-width="2.5"/>
-        <text x="345" y="295" fill="#69F0AE" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
-        <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">위성정사영상</text>
+        <circle cx="345" cy="300" r="28" fill="#000000" fill-opacity="0.85" stroke="#00E676" stroke-width="2.5"/>
+        <text x="345" y="295" fill="#69F0AE" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${jibeon}</text>
+        <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">(${jimok}) ${areaSqm.toLocaleString()}㎡</text>
       </g>
 
       <!-- Badge -->
@@ -1385,8 +1449,8 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       <text x="25" y="32" fill="#69F0AE" font-size="11" font-weight="bold" font-family="sans-serif">[도면2] 토지 현황 항공 위성사진 (WMTS Satellite)</text>
 
       <!-- Coord Footer -->
-      <rect x="15" y="415" width="270" height="22" fill="#000000" fill-opacity="0.85" rx="3"/>
-      <text x="25" y="430" fill="#B9F6CA" font-size="10" font-family="sans-serif">좌표: N ${lat.toFixed(4)}°, E ${lng.toFixed(4)}° (고해상도 위성영상)</text>
+      <rect x="15" y="415" width="480" height="22" fill="#000000" fill-opacity="0.85" rx="3"/>
+      <text x="25" y="430" fill="#B9F6CA" font-size="10" font-family="sans-serif">소재지: ${cleanTargetAddr} | 좌표: N ${lat.toFixed(4)}°, E ${lng.toFixed(4)}°</text>
 
       <!-- Compass -->
       <g transform="translate(550, 60)">
@@ -1422,8 +1486,8 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       <polygon points="210,210 490,190 520,380 180,410" fill="none" stroke="#F59E0B" stroke-width="4"/>
       
       <!-- Center Pin -->
-      <circle cx="345" cy="300" r="26" fill="#0F172A" fill-opacity="0.95" stroke="#F59E0B" stroke-width="2.5"/>
-      <text x="345" y="295" fill="#FBBF24" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
+      <circle cx="345" cy="300" r="28" fill="#0F172A" fill-opacity="0.95" stroke="#F59E0B" stroke-width="2.5"/>
+      <text x="345" y="295" fill="#FBBF24" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${jibeon}</text>
       <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">${zoning}</text>
 
       <!-- Legend Banner -->
@@ -1431,12 +1495,12 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       <text x="25" y="32" fill="#FCD34D" font-size="11" font-weight="bold" font-family="sans-serif">[도면3] VWORLD WMS Direct Endpoint (규제지구도)</text>
 
       <!-- Legend Detail Box -->
-      <rect x="20" y="50" width="310" height="65" fill="#1E293B" fill-opacity="0.92" rx="5" stroke="#334155" stroke-width="1"/>
+      <rect x="20" y="50" width="420" height="65" fill="#1E293B" fill-opacity="0.92" rx="5" stroke="#334155" stroke-width="1"/>
       <rect x="30" y="60" width="12" height="12" fill="#3B82F6" fill-opacity="0.8"/>
       <text x="48" y="71" fill="#E2E8F0" font-size="10" font-family="sans-serif">용도지역: ${zoning} (LT_C_UQ111)</text>
 
       <rect x="30" y="80" width="12" height="12" fill="#F59E0B" fill-opacity="0.8"/>
-      <text x="48" y="91" fill="#E2E8F0" font-size="10" font-family="sans-serif">연속지적 경계: PNU [${pnuCode}]</text>
+      <text x="48" y="91" fill="#E2E8F0" font-size="10" font-family="sans-serif">지목/면적: ${jimok} (${areaSqm.toLocaleString()}㎡) | PNU: ${pnuCode}</text>
 
       <!-- Endpoint Parameters Footer -->
       <rect x="15" y="395" width="570" height="42" fill="#1E293B" fill-opacity="0.95" rx="4" stroke="#475569" stroke-width="1"/>
@@ -1455,7 +1519,7 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
     const delta = 300; // 600m window
     const bbox = `${mercX - delta},${mercY - delta},${mercX + delta},${mercY + delta}`;
 
-    // Map imagery endpoints (VWorld WMS & Satellite images with guaranteed fallbacks)
+    // Map imagery endpoints
     const mapImages = {
       cadastral_map_url: cadastralDataUrl,
       satellite_map_url: satelliteDataUrl,
@@ -1471,16 +1535,23 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       vworld_wms_satellite: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=Satellite,LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=1024&HEIGHT=768&FORMAT=image/png&KEY=${vworldApiKey}`,
       vworld_wms_landuse: `https://api.vworld.kr/req/wms?SERVICE=WMS&REQUEST=GetMap&LAYERS=LT_C_UQ111,LP_PA_CBND_BUBBLE&STYLE=LP_PA_CBND_BUBBLE&CRS=EPSG:3857&BBOX=${bbox}&WIDTH=1024&HEIGHT=768&FORMAT=image/png&KEY=${vworldApiKey}`,
       eum_land_info: `https://www.eum.go.kr/web/ar/lu/luLandDet.do?isvel=Y&selType=address&pnu=${pnuCode}`,
-      kakao_map: `https://map.kakao.com/?q=${encodeURIComponent(targetAddress)}`
+      kakao_map: `https://map.kakao.com/?q=${encodeURIComponent(cleanTargetAddr)}`
     };
+
+    const vworldAttachedDocs = [
+      { name: '[도면1] 연속지적도 (WMS Cadastral Map)', url: cadastralDataUrl },
+      { name: '[도면2] 토지 현황 항공 위성사진 (WMTS Satellite)', url: satelliteDataUrl },
+      { name: '[도면3] VWORLD WMS Direct Endpoint (용도지역 규제도)', url: wmsDirectDataUrl }
+    ];
 
     res.json({
       success: true,
-      query_address: targetAddress,
+      query_address: cleanTargetAddr,
       pnu: pnuCode,
       vworld_api_key_status: 'AUTHENTICATED_OK',
       vworld_key_used: vworldApiKey.substring(0, 8) + '****',
       vworld_official_links: vworldOfficialLinks,
+      vworld_attached_docs: vworldAttachedDocs,
       coordinates: {
         lat: lat,
         lng: lng,
@@ -1488,6 +1559,19 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
         epsg3857_y: mercY,
         bbox_epsg3857: bbox
       },
+      land_info: {
+        address: cleanTargetAddr,
+        pnu: pnuCode,
+        jimok_official: jimok,
+        zoning_district: zoning,
+        official_land_price_sqm: officialPrice,
+        estimated_official_total: officialPrice * areaSqm,
+        building_coverage_ratio: zoning.includes('주거') ? '60%' : '40%',
+        floor_area_ratio: zoning.includes('주거') ? '200%' : '100%',
+        road_access: isSan ? '맹지 / 임도접함' : '소로2류(폭 8m~10m) 포장도로 접함',
+        land_shape: isSan ? '부정형 완경사지' : '평지 / 정형'
+      },
+      map_images: mapImages,
       user: {
         id: req.user.id,
         role: req.user.role,
@@ -1507,24 +1591,6 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
         { category: '2D/3D 모바일 API', version: 'v2.0', status: 'ACTIVE', desc: '모바일 반응형 토지 지도 인터페이스' },
         { category: '3D데스크톱 API', version: 'v2.0', status: 'ACTIVE', desc: '3D 분석 및 입체 경사도 시뮬레이션' },
         { category: '국가중점데이터 API', version: 'v1.0', status: 'ACTIVE', desc: '국토교통부 국가공간정보포털 빅데이터' }
-      ],
-      land_info: {
-        address: targetAddress,
-        pnu: pnuCode,
-        jimok_official: jimok,
-        zoning_district: zoning,
-        official_land_price_sqm: officialPrice,
-        estimated_official_total: officialPrice * 3305,
-        land_shape: '부정형 완경사지',
-        road_access: '소로2류(폭 8m~10m) 포장도로 접함',
-        building_coverage_ratio: zoning.includes('주거') ? '60%' : '40%',
-        floor_area_ratio: zoning.includes('주거') ? '200%' : '100%'
-      },
-      map_images: mapImages,
-      vworld_attached_docs: [
-        { title: '브이월드 연속지적도 필지경계선 도면', type: 'CADASTRAL_MAP', url: mapImages.cadastral_map_url },
-        { title: '토지 현황 항공 위성사진 오버레이', type: 'SATELLITE_IMG', url: mapImages.satellite_map_url },
-        { title: '국토교통부 토지이용계획확인서 첨부도면', type: 'REGULATION_MAP', url: mapImages.land_use_plan_url }
       ],
       fetched_at: new Date().toISOString()
     });
