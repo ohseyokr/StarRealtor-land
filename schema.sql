@@ -1,6 +1,5 @@
 -- ====================================================================
--- StarRealtor Land Brokerage Platform (스타공인중개사 토지 중개 플랫폼) v5
--- PostgreSQL Relational Database Physical Schema
+-- 한국지역개발토지분석원 토지 분석 플랫폼 Physical Schema
 -- Supported Target: PostgreSQL v14+ / Render Cloud PostgreSQL
 -- ====================================================================
 
@@ -17,10 +16,10 @@ DROP TABLE IF EXISTS TB_LAND_LISTING CASCADE;
 DROP TABLE IF EXISTS TB_USER CASCADE;
 DROP TABLE IF EXISTS TB_OWNER_CONFIG CASCADE;
 
--- 1. Owner Legal Metadata Table (공인중개사법 제18조의2 헤더/푸터 동적 공시 및 VWORLD 오피셜 개발키 관리)
+-- 1. Owner Legal Metadata Table
 CREATE TABLE TB_OWNER_CONFIG (
     config_id VARCHAR(50) PRIMARY KEY DEFAULT 'cfg-1',
-    office_name VARCHAR(150) NOT NULL DEFAULT '스타공인중개사사무소',
+    office_name VARCHAR(150) NOT NULL DEFAULT '한국지역개발토지분석원',
     owner_name VARCHAR(50) NOT NULL DEFAULT '홍길동',
     address VARCHAR(255) NOT NULL DEFAULT '서울특별시 서초구 반포대로 100, 4층',
     business_reg_num VARCHAR(50) NOT NULL DEFAULT '120-12-12345',
@@ -28,7 +27,7 @@ CREATE TABLE TB_OWNER_CONFIG (
     mobile_phone VARCHAR(30) NOT NULL DEFAULT '010-9876-5432',
     landline_phone VARCHAR(30) NOT NULL DEFAULT '02-1234-5678',
     fax_num VARCHAR(30) NOT NULL DEFAULT '02-1234-5679',
-    email VARCHAR(100) NOT NULL DEFAULT 'owner@starrealtor-land.co.kr',
+    email VARCHAR(100) NOT NULL DEFAULT 'owner@korea-land.or.kr',
     vworld_api_key VARCHAR(100) NOT NULL DEFAULT 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3',
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
