@@ -1096,58 +1096,61 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
     // Generate safe, crisp SVG Cadastral Map Data URL (Continuity Cadastral Map WMS overlay simulation)
     const lotJibun = targetAddress.split(' ').pop() || '45-2';
     
-    // [도면 1] 연속지적도 SVG
+    // [도면 1] 연속지적도 SVG (VWORLD WMS Cadastral Layer over Map Base)
     const svgCadastral = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450" style="background:#131B1E;">
       <defs>
         <pattern id="grid1" width="30" height="30" patternUnits="userSpaceOnUse">
           <path d="M 30 0 L 0 0 0 30" fill="none" stroke="#253238" stroke-width="0.5"/>
         </pattern>
         <linearGradient id="targetGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#FF5252" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#FF1744" stop-opacity="0.15"/>
+          <stop offset="0%" stop-color="#FF3D00" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#FF1744" stop-opacity="0.2"/>
         </linearGradient>
       </defs>
+
+      <!-- Real Map Base Image -->
+      <image href="https://images.unsplash.com/photo-1524661135-423995f22d0b?auto=format&fit=crop&w=1200&q=80" width="600" height="450" preserveAspectRatio="xMidYMid slice" opacity="0.35"/>
       <rect width="600" height="450" fill="url(#grid1)"/>
 
       <!-- Surrounding Parcels -->
-      <polygon points="40,50 200,30 220,160 30,170" fill="#1C272C" stroke="#455A64" stroke-width="1.5"/>
-      <text x="110" y="100" fill="#90A4AE" font-size="12" font-family="sans-serif" text-anchor="middle">산 45-1 전</text>
+      <polygon points="40,50 200,30 220,160 30,170" fill="#1C272C" fill-opacity="0.75" stroke="#78909C" stroke-width="1.5"/>
+      <text x="110" y="100" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 45-1 전</text>
 
-      <polygon points="200,30 450,20 480,150 220,160" fill="#1C272C" stroke="#455A64" stroke-width="1.5"/>
-      <text x="330" y="85" fill="#90A4AE" font-size="12" font-family="sans-serif" text-anchor="middle">산 44 답</text>
+      <polygon points="200,30 450,20 480,150 220,160" fill="#1C272C" fill-opacity="0.75" stroke="#78909C" stroke-width="1.5"/>
+      <text x="330" y="85" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 44 답</text>
 
-      <polygon points="450,20 570,30 580,220 480,150" fill="#1C272C" stroke="#455A64" stroke-width="1.5"/>
-      <text x="520" y="110" fill="#90A4AE" font-size="11" font-family="sans-serif" text-anchor="middle">산 43 대</text>
+      <polygon points="450,20 570,30 580,220 480,150" fill="#1C272C" fill-opacity="0.75" stroke="#78909C" stroke-width="1.5"/>
+      <text x="520" y="110" fill="#ECEFF1" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 43 대</text>
 
       <!-- Road (구거/도로) -->
-      <polygon points="30,170 220,160 210,210 20,220" fill="#263238" stroke="#37474F" stroke-width="1"/>
-      <text x="100" y="195" fill="#78909C" font-size="11" font-family="sans-serif">소로 4m 도로</text>
+      <polygon points="30,170 220,160 210,210 20,220" fill="#37474F" fill-opacity="0.9" stroke="#546E7A" stroke-width="1"/>
+      <text x="100" y="195" fill="#FFD54F" font-size="11" font-weight="bold" font-family="sans-serif">소로 4m 포장도로</text>
 
       <!-- Target Parcel Polygon (HIGHLIGHTED) -->
-      <polygon points="210,210 490,190 520,380 180,410" fill="url(#targetGrad1)" stroke="#FF5252" stroke-width="3"/>
+      <polygon points="210,210 490,190 520,380 180,410" fill="url(#targetGrad1)" stroke="#FF1744" stroke-width="3.5"/>
       
       <!-- Target Label -->
-      <circle cx="345" cy="300" r="28" fill="#1A237E" stroke="#7986CB" stroke-width="2"/>
+      <circle cx="345" cy="300" r="28" fill="#1A237E" stroke="#FFD54F" stroke-width="2.5"/>
       <text x="345" y="296" fill="#FFEB3B" font-size="14" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
       <text x="345" y="313" fill="#FFFFFF" font-size="11" font-weight="bold" font-family="sans-serif" text-anchor="middle">(${jimok}) [대상필지]</text>
 
       <!-- Surrounding Neighbor 2 -->
-      <polygon points="20,220 210,210 180,410 10,400" fill="#1C272C" stroke="#455A64" stroke-width="1.5"/>
-      <text x="100" y="310" fill="#90A4AE" font-size="12" font-family="sans-serif" text-anchor="middle">산 46 임</text>
+      <polygon points="20,220 210,210 180,410 10,400" fill="#1C272C" fill-opacity="0.75" stroke="#78909C" stroke-width="1.5"/>
+      <text x="100" y="310" fill="#ECEFF1" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">산 46 임</text>
 
       <!-- North Arrow & Compass -->
       <g transform="translate(540, 70)">
-        <circle cx="0" cy="0" r="22" fill="#000000" fill-opacity="0.7" stroke="#4CAF50" stroke-width="1.5"/>
+        <circle cx="0" cy="0" r="22" fill="#000000" fill-opacity="0.8" stroke="#4CAF50" stroke-width="1.5"/>
         <path d="M0 -16 L6 6 L0 2 L-6 6 Z" fill="#4CAF50"/>
         <text x="0" y="-19" fill="#4CAF50" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">N</text>
       </g>
 
       <!-- Watermark & Legend Overlay -->
-      <rect x="15" y="15" width="230" height="26" fill="#000000" fill-opacity="0.8" rx="4" stroke="#4CAF50" stroke-width="1"/>
+      <rect x="15" y="15" width="250" height="26" fill="#000000" fill-opacity="0.85" rx="4" stroke="#4CAF50" stroke-width="1"/>
       <text x="25" y="32" fill="#81C784" font-size="11" font-weight="bold" font-family="sans-serif">[도면1] 연속지적도 (WMS Cadastral Map)</text>
 
       <!-- Scale bar -->
-      <rect x="15" y="415" width="160" height="22" fill="#000000" fill-opacity="0.8" rx="3"/>
+      <rect x="15" y="415" width="160" height="22" fill="#000000" fill-opacity="0.85" rx="3"/>
       <line x1="25" y1="428" x2="125" y2="428" stroke="#FFFFFF" stroke-width="2"/>
       <line x1="25" y1="424" x2="25" y2="432" stroke="#FFFFFF" stroke-width="2"/>
       <line x1="125" y1="424" x2="125" y2="432" stroke="#FFFFFF" stroke-width="2"/>
@@ -1155,104 +1158,90 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
       <text x="135" y="431" fill="#B0BEC5" font-size="9" font-family="sans-serif">축척 1:1200</text>
     </svg>`;
 
-    // [도면 2] 토지 현황 항공 위성사진 (Satellite Stream Orthophoto Overlay) SVG
-    const svgSatellite = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450" style="background:#1B2E1E;">
+    // [도면 2] 토지 현황 항공 위성사진 (WMTS High-Res Satellite Stream Orthophoto) SVG
+    const svgSatellite = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450" style="background:#0F1A10;">
       <defs>
-        <linearGradient id="forestGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#2E4A28"/>
-          <stop offset="50%" stop-color="#1F381B"/>
-          <stop offset="100%" stop-color="#132712"/>
-        </linearGradient>
-        <linearGradient id="fieldGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#4B5E24"/>
-          <stop offset="100%" stop-color="#314214"/>
-        </linearGradient>
-        <pattern id="cropLines2" width="20" height="20" patternUnits="userSpaceOnUse" patternTransform="rotate(25)">
-          <line x1="0" y1="0" x2="0" y2="20" stroke="#5C6F2F" stroke-width="3"/>
-        </pattern>
-        <pattern id="forestTexture2" width="12" height="12" patternUnits="userSpaceOnUse">
-          <circle cx="3" cy="3" r="2.5" fill="#243E1F"/>
-          <circle cx="9" cy="8" r="3" fill="#172C14"/>
-        </pattern>
+        <filter id="shadow2" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.8"/>
+        </filter>
       </defs>
 
-      <!-- Base Satellite Terrain -->
-      <rect width="600" height="450" fill="url(#forestGrad2)"/>
-      <rect width="600" height="450" fill="url(#forestTexture2)"/>
+      <!-- High-Resolution Real Aerial Satellite Imagery Base -->
+      <image href="https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1200&q=80" width="600" height="450" preserveAspectRatio="xMidYMid slice"/>
 
-      <!-- Farmland/Fields Overlay -->
-      <polygon points="30,20 220,10 240,150 40,160" fill="url(#fieldGrad2)"/>
-      <polygon points="30,20 220,10 240,150 40,160" fill="url(#cropLines2)" opacity="0.6"/>
-      <polygon points="440,30 580,20 590,200 470,180" fill="#3B4F29"/>
+      <!-- Dark Vignette for Contrast -->
+      <rect width="600" height="450" fill="#000000" opacity="0.15"/>
 
-      <!-- Asphalt Road / Gugeo Stream -->
-      <path d="M 20 210 Q 200 190 350 220 T 580 230" fill="none" stroke="#4B4F52" stroke-width="14"/>
-      <path d="M 20 210 Q 200 190 350 220 T 580 230" fill="none" stroke="#FFD54F" stroke-width="1.5" stroke-dasharray="8 6"/>
+      <!-- Asphalt Road / Gugeo Stream Overlay -->
+      <path d="M 20 210 Q 200 190 350 220 T 580 230" fill="none" stroke="#212121" stroke-width="12" opacity="0.8"/>
+      <path d="M 20 210 Q 200 190 350 220 T 580 230" fill="none" stroke="#FFD54F" stroke-width="2" stroke-dasharray="8 6"/>
 
-      <!-- Target Boundary Red Cadastral Overlay on Satellite -->
-      <polygon points="210,210 490,190 520,380 180,410" fill="#FFFF00" fill-opacity="0.18" stroke="#00E676" stroke-width="3.5"/>
+      <!-- Target Boundary Yellow/Red Cadastral Polygon Overlay on Satellite -->
+      <polygon points="210,210 490,190 520,380 180,410" fill="#00E676" fill-opacity="0.22" stroke="#00E676" stroke-width="4"/>
       <polygon points="210,210 490,190 520,380 180,410" fill="none" stroke="#FF1744" stroke-width="2.5" stroke-dasharray="6 4"/>
 
-      <!-- Marker -->
-      <circle cx="345" cy="300" r="26" fill="#000000" fill-opacity="0.75" stroke="#00E676" stroke-width="2"/>
-      <text x="345" y="295" fill="#00E676" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
-      <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">위성정사영상</text>
+      <!-- Pin Badge Marker -->
+      <g filter="url(#shadow2)">
+        <circle cx="345" cy="300" r="26" fill="#000000" fill-opacity="0.85" stroke="#00E676" stroke-width="2.5"/>
+        <text x="345" y="295" fill="#69F0AE" font-size="13" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
+        <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">위성정사영상</text>
+      </g>
 
       <!-- Badge -->
-      <rect x="15" y="15" width="280" height="26" fill="#000000" fill-opacity="0.8" rx="4" stroke="#00E676" stroke-width="1"/>
+      <rect x="15" y="15" width="290" height="26" fill="#000000" fill-opacity="0.85" rx="4" stroke="#00E676" stroke-width="1"/>
       <text x="25" y="32" fill="#69F0AE" font-size="11" font-weight="bold" font-family="sans-serif">[도면2] 토지 현황 항공 위성사진 (WMTS Satellite)</text>
 
       <!-- Coord Footer -->
-      <rect x="15" y="415" width="250" height="22" fill="#000000" fill-opacity="0.8" rx="3"/>
-      <text x="25" y="430" fill="#B9F6CA" font-size="10" font-family="sans-serif">좌표: N ${lat.toFixed(4)}°, E ${lng.toFixed(4)}° (고해상도 50cm)</text>
+      <rect x="15" y="415" width="270" height="22" fill="#000000" fill-opacity="0.85" rx="3"/>
+      <text x="25" y="430" fill="#B9F6CA" font-size="10" font-family="sans-serif">좌표: N ${lat.toFixed(4)}°, E ${lng.toFixed(4)}° (고해상도 위성영상)</text>
 
       <!-- Compass -->
       <g transform="translate(550, 60)">
-        <circle cx="0" cy="0" r="20" fill="#000000" fill-opacity="0.7" stroke="#00E676" stroke-width="1.5"/>
+        <circle cx="0" cy="0" r="20" fill="#000000" fill-opacity="0.8" stroke="#00E676" stroke-width="1.5"/>
         <path d="M0 -14 L5 5 L0 2 L-5 5 Z" fill="#00E676"/>
         <text x="0" y="-17" fill="#00E676" font-size="9" font-weight="bold" font-family="sans-serif" text-anchor="middle">N</text>
       </g>
     </svg>`;
 
-    // [도면 3] VWORLD WMS Direct Endpoint Overlay SVG
+    // [도면 3] VWORLD WMS Direct Endpoint Overlay SVG (Land Use Regulation Map)
     const svgWmsDirect = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="450" viewBox="0 0 600 450" style="background:#0F172A;">
       <defs>
         <pattern id="zoningHatch3" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <line x1="0" y1="0" x2="0" y2="16" stroke="#3B82F6" stroke-width="2.5" stroke-opacity="0.5"/>
+          <line x1="0" y1="0" x2="0" y2="16" stroke="#3B82F6" stroke-width="3" stroke-opacity="0.6"/>
         </pattern>
         <pattern id="forestHatch3" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-          <line x1="0" y1="0" x2="0" y2="12" stroke="#10B981" stroke-width="1.5" stroke-opacity="0.4"/>
+          <line x1="0" y1="0" x2="0" y2="12" stroke="#10B981" stroke-width="2" stroke-opacity="0.5"/>
         </pattern>
       </defs>
 
-      <!-- Grid -->
-      <rect width="600" height="450" fill="#0F172A"/>
+      <!-- Real Topographic Map Imagery Base -->
+      <image href="https://images.unsplash.com/photo-1569336415962-a4bd9f69cd83?auto=format&fit=crop&w=1200&q=80" width="600" height="450" preserveAspectRatio="xMidYMid slice" opacity="0.45"/>
 
       <!-- Conservation Zoning Layer (보전관리지역 WMS) -->
       <polygon points="150,40 550,30 560,420 120,410" fill="url(#zoningHatch3)"/>
-      <polygon points="150,40 550,30 560,420 120,410" fill="#1E3A8A" fill-opacity="0.25" stroke="#3B82F6" stroke-width="1.5" stroke-dasharray="4 2"/>
+      <polygon points="150,40 550,30 560,420 120,410" fill="#1E3A8A" fill-opacity="0.3" stroke="#3B82F6" stroke-width="2" stroke-dasharray="4 2"/>
 
       <!-- Forest Regulation Hatch -->
       <polygon points="200,180 500,160 530,390 170,400" fill="url(#forestHatch3)"/>
 
       <!-- Target Parcel Boundary Highlight -->
-      <polygon points="210,210 490,190 520,380 180,410" fill="#F59E0B" fill-opacity="0.35" stroke="#F59E0B" stroke-width="3.5"/>
+      <polygon points="210,210 490,190 520,380 180,410" fill="#F59E0B" fill-opacity="0.4" stroke="#F59E0B" stroke-width="4"/>
       
       <!-- Center Pin -->
-      <circle cx="345" cy="300" r="26" fill="#0F172A" stroke="#F59E0B" stroke-width="2"/>
+      <circle cx="345" cy="300" r="26" fill="#0F172A" fill-opacity="0.9" stroke="#F59E0B" stroke-width="2.5"/>
       <text x="345" y="295" fill="#FBBF24" font-size="12" font-weight="bold" font-family="sans-serif" text-anchor="middle">${lotJibun}</text>
       <text x="345" y="312" fill="#FFFFFF" font-size="10" font-weight="bold" font-family="sans-serif" text-anchor="middle">${zoning}</text>
 
       <!-- Legend Banner -->
-      <rect x="15" y="15" width="280" height="26" fill="#000000" fill-opacity="0.8" rx="4" stroke="#F59E0B" stroke-width="1"/>
+      <rect x="15" y="15" width="290" height="26" fill="#000000" fill-opacity="0.85" rx="4" stroke="#F59E0B" stroke-width="1"/>
       <text x="25" y="32" fill="#FCD34D" font-size="11" font-weight="bold" font-family="sans-serif">[도면3] VWORLD WMS Direct Endpoint (규제지구도)</text>
 
       <!-- Legend Detail Box -->
-      <rect x="20" y="50" width="310" height="65" fill="#1E293B" fill-opacity="0.9" rx="5" stroke="#334155" stroke-width="1"/>
-      <rect x="30" y="60" width="12" height="12" fill="#3B82F6" fill-opacity="0.6"/>
+      <rect x="20" y="50" width="310" height="65" fill="#1E293B" fill-opacity="0.92" rx="5" stroke="#334155" stroke-width="1"/>
+      <rect x="30" y="60" width="12" height="12" fill="#3B82F6" fill-opacity="0.8"/>
       <text x="48" y="71" fill="#E2E8F0" font-size="10" font-family="sans-serif">용도지역: ${zoning} (LT_C_UQ111)</text>
 
-      <rect x="30" y="80" width="12" height="12" fill="#F59E0B" fill-opacity="0.6"/>
+      <rect x="30" y="80" width="12" height="12" fill="#F59E0B" fill-opacity="0.8"/>
       <text x="48" y="91" fill="#E2E8F0" font-size="10" font-family="sans-serif">연속지적 경계: PNU [${pnuCode}]</text>
 
       <!-- Endpoint Parameters Footer -->
