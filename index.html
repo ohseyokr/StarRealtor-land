@@ -185,7 +185,7 @@
                     <div class="bg-[#3A5A40] p-5 text-white">
                         <p class="text-[10px] uppercase tracking-widest mb-1 font-bold">Google Meet Ready</p>
                         <p class="text-xs leading-relaxed font-serif italic">
-                            매물 상담 및 현장 가이드 결제 완료 시 전담 조사연구원과 Google Meet 화상 상담 일정이 자동 매칭됩니다.
+                            토지 상담 및 현장 가이드 결제 완료 시 전담 조사연구원과 Google Meet 화상 상담 일정이 자동 매칭됩니다.
                         </p>
                     </div>
                 </div>
@@ -227,7 +227,7 @@
                 </div>
                 <div id="staff-add-listing-container" class="hidden">
                     <button onclick="openModal('add-listing-modal')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-xs px-4 py-2 transition uppercase tracking-wider flex items-center gap-1.5">
-                        <i class="fa-solid fa-plus text-xs"></i> 매물 수집 등록 (Staff/Admin)
+                        <i class="fa-solid fa-plus text-xs"></i> 토지 수집 등록 (Staff/Admin)
                     </button>
                 </div>
             </div>
@@ -257,7 +257,7 @@
                     </div>
                     <div class="flex items-center space-x-3">
                         <button id="btn-detail-add-cart" onclick="addCurrentToCart()" class="border border-[#1A1A1A] text-[#1A1A1A] hover:bg-[#1A1A1A] hover:text-white px-4 py-2 text-xs font-bold uppercase tracking-wider transition flex items-center gap-1.5">
-                            <i class="fa-solid fa-cart-plus"></i> 관심매물 담기
+                            <i class="fa-solid fa-cart-plus"></i> 관심토지 담기
                         </button>
                         <button onclick="openBookingModalForCurrent()" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-5 py-2 text-xs uppercase tracking-wider transition flex items-center gap-1.5 shadow-md">
                             <i class="fa-solid fa-video"></i> Google Meet 화상 상담 예약
@@ -577,7 +577,7 @@
             </div>
 
             <div class="pt-3 border-t border-black/10 flex justify-between items-center">
-                <span class="text-xs text-black/60">총 관심 매물 <strong id="cart-total-count" class="text-[#3A5A40]">0</strong>건</span>
+                <span class="text-xs text-black/60">총 관심 토지 <strong id="cart-total-count" class="text-[#3A5A40]">0</strong>건</span>
                 <button onclick="closeModal('cart-modal')" class="border border-black/20 px-4 py-2 text-xs font-bold uppercase tracking-wider">닫기</button>
             </div>
         </div>
@@ -642,14 +642,14 @@
             <div class="bg-[#F5F2ED] border border-black/10 p-3.5 text-[11px] text-black/70 flex items-start gap-2">
                 <i class="fa-solid fa-ban text-[#3A5A40] mt-0.5"></i>
                 <div>
-                    <strong>등록 금지 대상 토지 자동 차단:</strong> 군사보호지역, 농업진흥구역(절대농지), 개발제한구역(그린벨트)에 속하는 토지는 매물로 등록할 수 없으며 입력 즉시 검증 거절됩니다.
+                    <strong>등록 금지 대상 토지 자동 차단:</strong> 군사보호지역, 농업진흥구역(절대농지), 개발제한구역(그린벨트)에 속하는 토지는 토지로 등록할 수 없으며 입력 즉시 검증 거절됩니다.
                 </div>
             </div>
 
             <form onsubmit="handleCreateListingSubmit(event)" class="space-y-3 text-xs">
                 <div>
-                    <label class="block text-black/60 mb-1">매물 제목</label>
-                    <input type="text" id="new-title" placeholder="예: 강원도 평창군 대관령면 수하리 임야 매물" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
+                    <label class="block text-black/60 mb-1">토지 제목</label>
+                    <input type="text" id="new-title" placeholder="예: 강원도 평창군 대관령면 수하리 임야 토지" required class="w-full bg-white border border-black/15 p-2.5 text-[#1A1A1A] focus:outline-none focus:border-[#3A5A40]">
                 </div>
 
                 <div>
@@ -728,7 +728,7 @@
                 </div>
 
                 <button type="submit" class="w-full bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition mt-2">
-                    매물 검증 및 수집 등록
+                    토지 검증 및 수집 등록
                 </button>
             </form>
         </div>
@@ -750,7 +750,7 @@
             <div class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 p-3 text-xs flex items-center justify-between">
                 <div class="flex items-center gap-2">
                     <i class="fa-solid fa-gift text-[#3A5A40] text-sm"></i>
-                    <span class="text-[#3A5A40] font-bold">로그인 Member 전용 혜택: 관심 매물(장바구니) 담김 토지이용계획 100% 무상 분석 열람중</span>
+                    <span class="text-[#3A5A40] font-bold">로그인 Member 전용 혜택: 관심 토지(장바구니) 담김 토지이용계획 100% 무상 분석 열람중</span>
                 </div>
                 <span class="text-[10px] bg-[#3A5A40] text-white px-2 py-0.5 rounded font-bold">FREE REVIEW</span>
             </div>
@@ -915,7 +915,7 @@
         function updateLegalHeaderFooterUI(config) {
             if (!config || !config.office_name) return;
             // Header
-            document.getElementById('header-office-name').innerText = `상호: ${config.office_name}`;
+            document.getElementById('header-office-name').innerText = `기관: ${config.office_name}`;
             document.getElementById('header-landline-phone').innerText = config.landline_phone || '02-1234-5678';
             // Footer
             document.getElementById('footer-office-name').innerText = config.office_name;
@@ -1233,7 +1233,7 @@
                                     <span class="text-[10px] text-[#3A5A40] font-mono font-bold tracking-wider uppercase">${item.listing_id}</span>
                                     <h3 class="font-serif italic text-lg text-[#1A1A1A] group-hover:text-[#3A5A40] transition line-clamp-1">${item.title}</h3>
                                 </div>
-                                <button onclick="event.stopPropagation(); addToCartDirect('${item.listing_id}')" class="text-black/30 hover:text-[#3A5A40] text-base p-1" title="관심매물 담기">
+                                <button onclick="event.stopPropagation(); addToCartDirect('${item.listing_id}')" class="text-black/30 hover:text-[#3A5A40] text-base p-1" title="관심토지 담기">
                                     <i class="fa-solid fa-cart-plus"></i>
                                 </button>
                             </div>
@@ -1254,7 +1254,7 @@
                             <div class="pt-1 flex items-center justify-between text-[10px]">
                                 <span class="text-black/50">담당: ${item.assistant_nickname}</span>
                                 <div class="flex items-center gap-1.5">
-                                    <button onclick="event.stopPropagation(); openLandUseReviewModal('${item.listing_id}')" class="bg-[#3A5A40]/10 text-[#3A5A40] hover:bg-[#3A5A40] hover:text-white font-bold px-2 py-0.5 border border-[#3A5A40]/30 transition" title="관심매물 3대 공공 API 무상 분석">
+                                    <button onclick="event.stopPropagation(); openLandUseReviewModal('${item.listing_id}')" class="bg-[#3A5A40]/10 text-[#3A5A40] hover:bg-[#3A5A40] hover:text-white font-bold px-2 py-0.5 border border-[#3A5A40]/30 transition" title="관심토지 3대 공공 API 무상 분석">
                                         무상 분석
                                     </button>
                                     <button onclick="event.stopPropagation(); openSecurePdfViewer('${item.listing_id}', 'LURIS')" class="bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold px-2 py-0.5 border border-stone-300 transition flex items-center gap-1" title="결제 및 미팅 완료 회원 전용 PDF">
@@ -1430,7 +1430,7 @@
 
         async function openLandUseReviewModal(listingId) {
             if (!currentUser) {
-                alert('로그인한 회원에 한해 관심 매물의 토지이용계획 정보를 무상으로 리뷰할 수 있습니다.');
+                alert('로그인한 회원에 한해 관심 토지의 토지이용계획 정보를 무상으로 리뷰할 수 있습니다.');
                 openModal('login-modal');
                 return;
             }
@@ -2047,7 +2047,7 @@ ${apisListStr}
         }
         async function addToCartDirect(listingId) {
             if (!currentUser) {
-                alert('관심 매물을 담으려면 로그인이 필요합니다.');
+                alert('관심 토지을 담으려면 로그인이 필요합니다.');
                 openModal('login-modal');
                 return;
             }
@@ -2064,7 +2064,7 @@ ${apisListStr}
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || '담기 실패');
 
-                alert('관심 매물(쇼핑카드)에 추가되었습니다.');
+                alert('관심 토지(쇼핑카드)에 추가되었습니다.');
                 updateCartBadge();
             } catch (err) {
                 alert(err.message);
@@ -2108,7 +2108,7 @@ ${apisListStr}
                 document.getElementById('cart-total-count').innerText = items.length;
 
                 if (items.length === 0) {
-                    list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 매물이 없습니다.</p>`;
+                    list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 토지이 없습니다.</p>`;
                 } else {
                     items.forEach(c => {
                         list.innerHTML += `
@@ -2128,7 +2128,7 @@ ${apisListStr}
                                     <button onclick="openBookingModalForListing('${c.listing.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[10px] px-2.5 py-1 uppercase transition">
                                         미팅 예약
                                     </button>
-                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심매물 삭제">
+                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심토지 삭제">
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
                                 </div>
@@ -2458,14 +2458,14 @@ ${apisListStr}
         }
 
         async function deleteCartItem(listingId) {
-            if (!confirm('선택하신 대상 토지을 관심 매물(장바구니)에서 삭제하시겠습니까?')) return;
+            if (!confirm('선택하신 대상 토지을 관심 토지(장바구니)에서 삭제하시겠습니까?')) return;
             try {
                 const res = await fetch(`/api/cart/${listingId}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${currentUser.token}` }
                 });
                 if (!res.ok) throw new Error('삭제 처리 실패');
-                alert('관심 매물(장바구니)에서 삭제되었습니다.');
+                alert('관심 토지(장바구니)에서 삭제되었습니다.');
                 showDashboardView();
             } catch(e) {
                 alert(`[오류] ${e.message}`);
@@ -2474,7 +2474,7 @@ ${apisListStr}
 
         async function staffSubmitApprovalRequest(listingId, requestType) {
             const label = requestType === 'REGISTRATION' ? '등록승인요청' : requestType === 'DELETE' ? '삭제승인요청' : '승인요청';
-            if (!confirm(`해당 매물에 대해 대표자(Owner)에게 '${label}'을(를) 시간정보와 함께 전송하시겠습니까?`)) return;
+            if (!confirm(`해당 토지에 대해 대표자(Owner)에게 '${label}'을(를) 시간정보와 함께 전송하시겠습니까?`)) return;
             try {
                 const res = await fetch(`/api/listings/${listingId}/request-approval`, {
                     method: 'POST',
@@ -2568,9 +2568,9 @@ ${apisListStr}
         }
 
         async function adminDeleteListing(listingId) {
-            const reason = prompt('매물 삭제 사유를 직접 입력하여 주십시오 (Staff와 Owner가 알 수 있도록 저장됩니다):');
+            const reason = prompt('토지 삭제 사유를 직접 입력하여 주십시오 (Staff와 Owner가 알 수 있도록 저장됩니다):');
             if (!reason || !reason.trim()) {
-                alert('매물 삭제 시에는 반드시 삭제 사유를 입력해야 합니다.');
+                alert('토지 삭제 시에는 반드시 삭제 사유를 입력해야 합니다.');
                 return;
             }
 
@@ -2585,7 +2585,7 @@ ${apisListStr}
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || '삭제 실패');
-                alert(data.message || '매물이 삭제 처리되었습니다.');
+                alert(data.message || '토지이 삭제 처리되었습니다.');
                 showDashboardView();
             } catch(e) {
                 alert(`[오류] ${e.message}`);
@@ -2603,14 +2603,14 @@ ${apisListStr}
 
             let listingsHtml = '';
             if (selectedListings.length === 0) {
-                listingsHtml = `<p class="text-xs text-black/40 py-3">선택/관심 등록된 대상 토지 내역이 없습니다. (메인 매물 리스트에서 장바구니/미팅신청 가능)</p>`;
+                listingsHtml = `<p class="text-xs text-black/40 py-3">선택/관심 등록된 대상 토지 내역이 없습니다. (메인 토지 리스트에서 장바구니/미팅신청 가능)</p>`;
             } else {
                 listingsHtml = `
                     <div class="overflow-x-auto">
                         <table class="w-full text-left border-collapse">
                             <thead class="text-black/50 border-b border-black/10 text-[10px] uppercase font-bold">
                                 <tr>
-                                    <th class="p-2">매물명</th>
+                                    <th class="p-2">토지명</th>
                                     <th class="p-2">소재지/지번</th>
                                     <th class="p-2">지목</th>
                                     <th class="p-2">면적</th>
@@ -3278,7 +3278,7 @@ ${apisListStr}
                                     <i class="fa-solid fa-user-pen"></i> 담당 Staff 변경 (사유입력)
                                 </button>
                                 <button onclick="adminDeleteListing('${l.listing_id}')" class="bg-rose-700 hover:bg-rose-800 text-white font-bold px-2.5 py-1 text-[11px] rounded shadow-2xs flex items-center gap-1">
-                                    <i class="fa-solid fa-trash-can"></i> 매물 삭제 (사유입력)
+                                    <i class="fa-solid fa-trash-can"></i> 토지 삭제 (사유입력)
                                 </button>
                             </div>
                         </div>
@@ -3582,7 +3582,7 @@ ${apisListStr}
                 });
 
                 const data = await res.json();
-                if (!res.ok) throw new Error(data.error || '매물 등록 거절');
+                if (!res.ok) throw new Error(data.error || '토지 등록 거절');
 
                 closeModal('add-listing-modal');
                 alert('대상 토지이 성공적으로 검증 및 수집 등록 되었습니다!');
