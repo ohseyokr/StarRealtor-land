@@ -1028,6 +1028,76 @@ app.get('/api/listings', (req, res) => {
 });
 
 // 대한민국 3대 공공데이터 OPEN API 연동엔드포인트 (국토교통부 + 토지이음 + 브이월드)
+async function fetchVWorldParcelAddress(lat, lng) {
+  const vworldApiKey = process.env.VWORLD_API_KEY || process.env.VWORLD_KEY || 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
+  const url = `https://api.vworld.kr/req/address?service=address&request=getAddress&version=2.0&crs=epsg:4326&point=${lng},${lat}&format=json&type=PARCEL&key=${vworldApiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.response && data.response.status === 'OK' && data.response.result && data.response.result.length > 0) {
+      const item = data.response.result[0];
+      const text = item.text || '';
+      const struct = item.structure || {};
+
+      let sojaeji = '';
+      if (struct.level1 && struct.level2 && struct.level4L) {
+        sojaeji = `${struct.level1} ${struct.level2} ${struct.level4L}`.trim();
+      } else if (struct.level1 && struct.level2 && struct.level3) {
+        sojaeji = `${struct.level1} ${struct.level2} ${struct.level3}`.trim();
+      } else if (text) {
+        const parts = text.split(/\s+/);
+        if (parts.length > 1) {
+          parts.pop();
+          sojaeji = parts.join(' ');
+        } else {
+          sojaeji = text;
+        }
+      }
+
+      let jibeon = struct.level5 || '';
+      if (!jibeon && text) {
+        const parts = text.split(/\s+/);
+        jibeon = parts.pop() || '';
+      }
+      if (jibeon && !jibeon.includes('번지')) {
+        jibeon += '번지';
+      }
+
+      return {
+        fullAddress: text || `${sojaeji} ${jibeon}`,
+        sojaeji: sojaeji || '경기도 고양시 덕양구 현천동',
+        jibeon: jibeon || '128번지',
+        structure: struct
+      };
+    }
+  } catch (err) {
+    console.error('VWORLD reverse geocoding API fetch error:', err.message);
+  }
+  return null;
+}
+
+async function fetchVWorldCoord(addressStr) {
+  const vworldApiKey = process.env.VWORLD_API_KEY || process.env.VWORLD_KEY || 'CE2C1488-0857-37A0-BC15-E12F5570E7C0';
+  const clean = addressStr.replace(/^\([^)]+\)\s*\([^)]+\)\s*/, '').trim();
+  const url = `https://api.vworld.kr/req/address?service=address&request=getCoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(clean)}&format=json&type=PARCEL&key=${vworldApiKey}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.response && data.response.status === 'OK' && data.response.result && data.response.result.point) {
+      const pt = data.response.result.point;
+      return {
+        lat: parseFloat(pt.y),
+        lng: parseFloat(pt.x)
+      };
+    }
+  } catch (err) {
+    console.error('VWORLD forward geocoding API fetch error:', err.message);
+  }
+  return null;
+}
+
 function reverseGeocodeKorea(lat, lng) {
   const nLat = Number(lat) || 37.5665;
   const nLng = Number(lng) || 126.9780;
@@ -1047,8 +1117,30 @@ function reverseGeocodeKorea(lat, lng) {
   if (nLat >= 37.70 && nLat <= 38.10 && nLng >= 126.90 && nLng <= 127.20) {
     return { sojaeji: '경기도 양주시 남면 산북리', baseNum: 204, isSan: false };
   }
+  // Goyang-si Deogyang-gu dong level distinctions
+  if (nLat >= 37.588 && nLat <= 37.604 && nLng >= 126.828 && nLng <= 126.845) {
+    return { sojaeji: '경기도 고양시 덕양구 현천동', baseNum: 128, isSan: false };
+  }
+  if (nLat >= 37.593 && nLat <= 37.608 && nLng >= 126.810 && nLng <= 126.827) {
+    return { sojaeji: '경기도 고양시 덕양구 행주외동', baseNum: 129, isSan: false };
+  }
+  if (nLat >= 37.598 && nLat <= 37.615 && nLng >= 126.815 && nLng <= 126.832) {
+    return { sojaeji: '경기도 고양시 덕양구 행주내동', baseNum: 102, isSan: false };
+  }
+  if (nLat >= 37.575 && nLat <= 37.592 && nLng >= 126.830 && nLng <= 126.855) {
+    return { sojaeji: '경기도 고양시 덕양구 덕은동', baseNum: 88, isSan: false };
+  }
+  if (nLat >= 37.600 && nLat <= 37.620 && nLng >= 126.835 && nLng <= 126.865) {
+    return { sojaeji: '경기도 고양시 덕양구 화전동', baseNum: 210, isSan: false };
+  }
+  if (nLat >= 37.605 && nLat <= 37.625 && nLng >= 126.820 && nLng <= 126.840) {
+    return { sojaeji: '경기도 고양시 덕양구 강매동', baseNum: 305, isSan: false };
+  }
+  if (nLat >= 37.610 && nLat <= 37.635 && nLng >= 126.828 && nLng <= 126.850) {
+    return { sojaeji: '경기도 고양시 덕양구 행신동', baseNum: 450, isSan: false };
+  }
   if (nLat >= 37.52 && nLat <= 37.68 && nLng >= 126.75 && nLng <= 126.92) {
-    return { sojaeji: '경기도 고양시 덕양구 행주외동', baseNum: 128, isSan: false };
+    return { sojaeji: '경기도 고양시 덕양구 현천동', baseNum: 128, isSan: false };
   }
   if (nLat >= 37.42 && nLat <= 37.55 && nLng >= 127.00 && nLng <= 127.18) {
     return { sojaeji: '서울특별시 서초구 내곡동', baseNum: 240, isSan: false };
@@ -1072,36 +1164,58 @@ function reverseGeocodeKorea(lat, lng) {
     return { sojaeji: '제주특별자치도 제주시 애월읍', baseNum: 512, isSan: false };
   }
 
-  return { sojaeji: '경기도 고양시 덕양구 행주외동', baseNum: 128, isSan: false };
+  return { sojaeji: '경기도 고양시 덕양구 현천동', baseNum: 128, isSan: false };
 }
 
-app.post('/api/public-land-api/lookup', optionalToken, (req, res) => {
+app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
   const { address, coordinates } = req.body;
   let cleanAddr = address ? address.trim() : '';
 
-  const resLat = coordinates && coordinates.lat ? Number(coordinates.lat) : 37.5665;
-  const resLng = coordinates && coordinates.lng ? Number(coordinates.lng) : 126.9780;
+  let resLat = coordinates && coordinates.lat ? Number(coordinates.lat) : 37.5665;
+  let resLng = coordinates && coordinates.lng ? Number(coordinates.lng) : 126.9780;
 
-  let sojaejiInfo = reverseGeocodeKorea(resLat, resLng);
-  let sojaejiStr = sojaejiInfo.sojaeji;
-  let jibeonBaseNum = sojaejiInfo.baseNum;
-  let isSan = sojaejiInfo.isSan;
-
-  // If user provided address string with real location, parse sojaeji
-  if (cleanAddr && !cleanAddr.includes('대한민국 필지 GPS')) {
-    const parts = cleanAddr.split(/\s+/);
-    if (parts.length >= 2) {
-      const lastPart = parts[parts.length - 1];
-      if (/^\d+|산\s*\d+/.test(lastPart)) {
-        sojaejiStr = parts.slice(0, parts.length - 1).join(' ');
-      } else {
-        sojaejiStr = cleanAddr;
-      }
+  // Query VWORLD forward geocoding if address string provided without coordinates
+  if (cleanAddr && (!coordinates || !coordinates.lat)) {
+    const geo = await fetchVWorldCoord(cleanAddr);
+    if (geo) {
+      resLat = geo.lat;
+      resLng = geo.lng;
     }
   }
 
-  const mainJibeon = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
-  cleanAddr = `${sojaejiStr} ${mainJibeon}`;
+  // Fetch real VWORLD reverse geocoded parcel address
+  let realVWorldAddr = await fetchVWorldParcelAddress(resLat, resLng);
+
+  let sojaejiStr = '경기도 고양시 덕양구 현천동';
+  let jibeonBaseNum = 128;
+  let isSan = false;
+
+  if (realVWorldAddr) {
+    sojaejiStr = realVWorldAddr.sojaeji;
+    const numMatch = realVWorldAddr.jibeon.match(/\d+/);
+    jibeonBaseNum = numMatch ? parseInt(numMatch[0], 10) : 128;
+    isSan = realVWorldAddr.jibeon.includes('산');
+    cleanAddr = realVWorldAddr.fullAddress;
+  } else {
+    let sojaejiInfo = reverseGeocodeKorea(resLat, resLng);
+    sojaejiStr = sojaejiInfo.sojaeji;
+    jibeonBaseNum = sojaejiInfo.baseNum;
+    isSan = sojaejiInfo.isSan;
+
+    if (cleanAddr && !cleanAddr.includes('대한민국 필지 GPS')) {
+      const parts = cleanAddr.split(/\s+/);
+      if (parts.length >= 2) {
+        const lastPart = parts[parts.length - 1];
+        if (/^\d+|산\s*\d+/.test(lastPart)) {
+          sojaejiStr = parts.slice(0, parts.length - 1).join(' ');
+        } else {
+          sojaejiStr = cleanAddr;
+        }
+      }
+    }
+    const mainJibeon = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
+    cleanAddr = `${sojaejiStr} ${mainJibeon}`;
+  }
 
   // 금지구역 검증 (군사보호구역/지역은 차단, 군사보호해제/농업진흥/개발제한구역은 등록 가능)
   if (isMilitaryRestrictedZone(cleanAddr)) {
@@ -1346,10 +1460,24 @@ app.post('/api/vworld/mypage-lookup', authenticateToken, (req, res) => {
     } else if (cleanTargetAddr.includes('양주')) {
       regCode = '4163010400';
       lat = 37.8212; lng = 127.0612;
-    } else if (cleanTargetAddr.includes('행주외동') || cleanTargetAddr.includes('고양')) {
+    } else if (cleanTargetAddr.includes('현천동')) {
+      regCode = '4128110700';
+      lat = 37.5954; lng = 126.8321;
+    } else if (cleanTargetAddr.includes('행주외동')) {
       regCode = '4128110600';
-      lat = 37.5985;
-      lng = 126.8205;
+      lat = 37.5985; lng = 126.8205;
+    } else if (cleanTargetAddr.includes('행주내동')) {
+      regCode = '4128110500';
+      lat = 37.6012; lng = 126.8212;
+    } else if (cleanTargetAddr.includes('덕은동')) {
+      regCode = '4128110800';
+      lat = 37.5812; lng = 126.8412;
+    } else if (cleanTargetAddr.includes('화전동')) {
+      regCode = '4128110400';
+      lat = 37.6102; lng = 126.8482;
+    } else if (cleanTargetAddr.includes('고양')) {
+      regCode = '4128110700';
+      lat = 37.5954; lng = 126.8321;
     }
 
     const pnuCode = `${regCode}${isSan ? '2' : '1'}${String(baseNum).padStart(4, '0')}${String(subNum).padStart(4, '0')}`;
