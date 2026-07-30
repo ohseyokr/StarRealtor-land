@@ -299,12 +299,12 @@ const inMemoryDB = {
       listing_id: 'lnd-107',
       assistant_id: 'u-staff-1',
       assistant_nickname: '토지조사원',
-      title: '(잡종지) (1,100㎡) 경기도 고양시 덕양구 행주외동 129-1번지',
-      address: '경기도 고양시 덕양구 행주외동 129-1번지',
-      sojaeji: '경기도 고양시 덕양구 행주외동',
+      title: '(잡종지) (1,100㎡) 경기도 고양시 덕양구 현천동 129-1번지',
+      address: '경기도 고양시 덕양구 현천동 129-1번지',
+      sojaeji: '경기도 고양시 덕양구 현천동',
       jibeon: '129-1번지',
-      lat: 37.5985,
-      lng: 126.8205,
+      lat: 37.5958,
+      lng: 126.8325,
       jimok_official: '잡종지',
       area_sqm: 1100,
       price: 450000000,
@@ -1167,6 +1167,42 @@ function reverseGeocodeKorea(lat, lng) {
   return { sojaeji: '경기도 고양시 덕양구 현천동', baseNum: 128, isSan: false };
 }
 
+async function getVWorldParcelForPoint(lat, lng) {
+  const nLat = Number(lat) || 37.5665;
+  const nLng = Number(lng) || 126.9780;
+  let real = await fetchVWorldParcelAddress(nLat, nLng);
+  if (real && real.sojaeji && real.jibeon) {
+    return {
+      fullAddress: real.fullAddress,
+      sojaeji: real.sojaeji,
+      jibeon: real.jibeon,
+      lat: nLat,
+      lng: nLng
+    };
+  }
+  let fb = reverseGeocodeKorea(nLat, nLng);
+  const mainJibeon = fb.isSan ? `산 ${fb.baseNum}-2번지` : `${fb.baseNum}번지`;
+  return {
+    fullAddress: `${fb.sojaeji} ${mainJibeon}`,
+    sojaeji: fb.sojaeji,
+    jibeon: mainJibeon,
+    lat: nLat,
+    lng: nLng
+  };
+}
+
+app.post('/api/public-land-api/reverse-geocode', optionalToken, async (req, res) => {
+  const { lat, lng, points } = req.body;
+  if (Array.isArray(points) && points.length > 0) {
+    const results = await Promise.all(points.map(p => getVWorldParcelForPoint(p.lat, p.lng)));
+    return res.json({ success: true, results });
+  }
+  const resLat = Number(lat) || 37.5665;
+  const resLng = Number(lng) || 126.9780;
+  const result = await getVWorldParcelForPoint(resLat, resLng);
+  return res.json({ success: true, ...result });
+});
+
 app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
   const { address, coordinates } = req.body;
   let cleanAddr = address ? address.trim() : '';
@@ -1183,39 +1219,15 @@ app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
     }
   }
 
-  // Fetch real VWORLD reverse geocoded parcel address
-  let realVWorldAddr = await fetchVWorldParcelAddress(resLat, resLng);
+  // Fetch real VWORLD reverse geocoded parcel address for center and offsets
+  const [p1, p2, p3] = await Promise.all([
+    getVWorldParcelForPoint(resLat, resLng),
+    getVWorldParcelForPoint(resLat + 0.0002, resLng + 0.0002),
+    getVWorldParcelForPoint(resLat - 0.0002, resLng - 0.0002)
+  ]);
 
-  let sojaejiStr = '경기도 고양시 덕양구 현천동';
-  let jibeonBaseNum = 128;
-  let isSan = false;
-
-  if (realVWorldAddr) {
-    sojaejiStr = realVWorldAddr.sojaeji;
-    const numMatch = realVWorldAddr.jibeon.match(/\d+/);
-    jibeonBaseNum = numMatch ? parseInt(numMatch[0], 10) : 128;
-    isSan = realVWorldAddr.jibeon.includes('산');
-    cleanAddr = realVWorldAddr.fullAddress;
-  } else {
-    let sojaejiInfo = reverseGeocodeKorea(resLat, resLng);
-    sojaejiStr = sojaejiInfo.sojaeji;
-    jibeonBaseNum = sojaejiInfo.baseNum;
-    isSan = sojaejiInfo.isSan;
-
-    if (cleanAddr && !cleanAddr.includes('대한민국 필지 GPS')) {
-      const parts = cleanAddr.split(/\s+/);
-      if (parts.length >= 2) {
-        const lastPart = parts[parts.length - 1];
-        if (/^\d+|산\s*\d+/.test(lastPart)) {
-          sojaejiStr = parts.slice(0, parts.length - 1).join(' ');
-        } else {
-          sojaejiStr = cleanAddr;
-        }
-      }
-    }
-    const mainJibeon = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
-    cleanAddr = `${sojaejiStr} ${mainJibeon}`;
-  }
+  let sojaejiStr = p1.sojaeji;
+  cleanAddr = p1.fullAddress;
 
   // 금지구역 검증 (군사보호구역/지역은 차단, 군사보호해제/농업진흥/개발제한구역은 등록 가능)
   if (isMilitaryRestrictedZone(cleanAddr)) {
@@ -1274,28 +1286,22 @@ app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
     coordinates: { lat: resLat, lng: resLng }
   };
 
-  // Construct extracted parcels strictly matching requested structure:
-  // Title structure: '([지목]) ([면적]㎡) [소재지] [지번]'
-  // Address structure: '[소재지] [지번]'
-  const jibeon1 = isSan ? `산 ${jibeonBaseNum}-2번지` : `${jibeonBaseNum}번지`;
-  const jibeon2 = isSan ? `산 ${jibeonBaseNum+1}-4번지` : `${jibeonBaseNum}-4번지`;
-  const jibeon3 = isSan ? `산 ${jibeonBaseNum+2}-1번지` : `${jibeonBaseNum+1}-1번지`;
-
+  // Construct extracted parcels strictly matching real VWORLD reverse geocoded land lot numbers:
   const extractedParcels = [
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-1`,
-      title: `(${vworldData.jimok_official}) (850㎡) ${sojaejiStr} ${jibeon1}`,
-      address: `${sojaejiStr} ${jibeon1}`,
-      sojaeji: sojaejiStr,
-      jibeon: jibeon1,
+      title: `(${vworldData.jimok_official}) (850㎡) ${p1.sojaeji} ${p1.jibeon}`,
+      address: `${p1.sojaeji} ${p1.jibeon}`,
+      sojaeji: p1.sojaeji,
+      jibeon: p1.jibeon,
       jimok_official: vworldData.jimok_official,
       area_sqm: 850,
       price: officialPrice > 200000 ? 520000000 : 280000000,
       official_land_price_sqm: officialPrice,
       zoning_district: zoning,
       road_access: '소로2류(폭 8m~10m) 포장도로 접함',
-      lat: resLat,
-      lng: resLng,
+      lat: p1.lat,
+      lng: p1.lng,
       is_vworld_extracted: true,
       assistant_id: 'u-owner-1',
       assistant_nickname: '한국지역개발토지분석원',
@@ -1304,18 +1310,18 @@ app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
     },
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-2`,
-      title: `(전) (620㎡) ${sojaejiStr} ${jibeon2}`,
-      address: `${sojaejiStr} ${jibeon2}`,
-      sojaeji: sojaejiStr,
-      jibeon: jibeon2,
+      title: `(전) (620㎡) ${p2.sojaeji} ${p2.jibeon}`,
+      address: `${p2.sojaeji} ${p2.jibeon}`,
+      sojaeji: p2.sojaeji,
+      jibeon: p2.jibeon,
       jimok_official: '전',
       area_sqm: 620,
       price: officialPrice > 200000 ? 380000000 : 190000000,
       official_land_price_sqm: officialPrice,
       zoning_district: zoning,
       road_access: '지적도상 포장도로 접함',
-      lat: resLat + 0.0001,
-      lng: resLng + 0.0001,
+      lat: p2.lat,
+      lng: p2.lng,
       is_vworld_extracted: true,
       assistant_id: 'u-owner-1',
       assistant_nickname: '한국지역개발토지분석원',
@@ -1324,18 +1330,18 @@ app.post('/api/public-land-api/lookup', optionalToken, async (req, res) => {
     },
     {
       listing_id: `vw-extracted-${resLat.toFixed(4)}-${resLng.toFixed(4)}-3`,
-      title: `(잡종지) (1,100㎡) ${sojaejiStr} ${jibeon3}`,
-      address: `${sojaejiStr} ${jibeon3}`,
-      sojaeji: sojaejiStr,
-      jibeon: jibeon3,
+      title: `(잡종지) (1,100㎡) ${p3.sojaeji} ${p3.jibeon}`,
+      address: `${p3.sojaeji} ${p3.jibeon}`,
+      sojaeji: p3.sojaeji,
+      jibeon: p3.jibeon,
       jimok_official: '잡종지',
       area_sqm: 1100,
       price: officialPrice > 200000 ? 690000000 : 340000000,
       official_land_price_sqm: officialPrice,
       zoning_district: '보전관리지역',
       road_access: '소로3류 포장도로 접함',
-      lat: resLat - 0.0001,
-      lng: resLng - 0.0001,
+      lat: p3.lat,
+      lng: p3.lng,
       is_vworld_extracted: true,
       assistant_id: 'u-owner-1',
       assistant_nickname: '한국지역개발토지분석원',
