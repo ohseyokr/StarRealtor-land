@@ -173,15 +173,15 @@ CREATE INDEX IF NOT EXISTS idx_vworld_log_user ON TB_VWORLD_API_LOG(user_id);
 
 -- 1. Default Owner Config
 INSERT INTO TB_OWNER_CONFIG (config_id, office_name, owner_name, address, business_reg_num, license_num, mobile_phone, landline_phone, fax_num, email, vworld_api_key)
-VALUES ('cfg-1', '한국지역개발토지분석원', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-9876-5432', '02-1234-5678', '02-1234-5679', 'owner@starrealtor-land.co.kr', 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3')
+VALUES ('cfg-1', '한국지역개발토지분석원', '홍길동', '서울특별시 서초구 반포대로 100, 4층', '120-12-12345', '제11650-2026-00001호', '010-1111-2222', '02-1234-5678', '02-1234-5679', 'uofficekr@gmail.com', 'CE2C1488-301B-303A-8673-E2E0D4B2D8E3')
 ON CONFLICT (config_id) DO NOTHING;
 
 -- 2. Seed Users (Disabled)
 -- INSERT INTO TB_USER (user_id, email, password_hash, nickname, name, phone_number, role) VALUES
--- ('u-admin-1', 'ohseyokr@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '최고관리자', '시스템관리자', '010-1111-2222', 'ADMIN'),
--- ('u-owner-1', 'owner@starrealtor-land.co.kr', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '대표중개사', '홍길동', '010-9876-5432', 'OWNER'),
--- ('u-staff-1', 'staff1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '김보조원', '김철수', '010-3333-4444', 'STAFF'),
--- ('u-member-1', 'member1@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '토지투자왕', '이영희', '010-5555-6666', 'MEMBER')
+-- ('u-admin-1', 'ohseyokr@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '최고관리자', '김태엽', '010-3274-4737', 'ADMIN'),
+-- ('u-owner-1', 'uofficekr@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '한국지역개발토지분석원', '홍길동', '010-1111-2222', 'OWNER'),
+-- ('u-staff-1', 'wuaera@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '토지조사원', '김철수', '010-3333-4444', 'STAFF'),
+-- ('u-member-1', 'a4uprint@gmail.com', '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', '회원', '이영희', '010-5555-6666', 'MEMBER')
 -- ON CONFLICT (user_id) DO NOTHING;
 
 -- 3. Seed Land Listings (Disabled)
