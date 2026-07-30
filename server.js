@@ -76,10 +76,10 @@ const inMemoryDB = {
     address: '서울특별시 서초구 반포대로 100, 4층',
     business_reg_num: '120-12-12345',
     license_num: '제11650-2026-00001호',
-    mobile_phone: '010-9876-5432',
+    mobile_phone: '010-1111-2222',
     landline_phone: '02-1234-5678',
     fax_num: '02-1234-5679',
-    email: 'owner@korea-land.or.kr'
+    email: 'uofficekr@gmail.com'
   },
   users: [
     {
@@ -87,26 +87,26 @@ const inMemoryDB = {
       email: process.env.Admin_ID || process.env.ADMIN_ID || 'ohseyokr@gmail.com',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e', // admin123
       nickname: '최고관리자',
-      name: '시스템관리자',
-      phone_number: '010-1111-2222',
+      name: '김태엽',
+      phone_number: '010-3274-4737',
       role: 'ADMIN',
       created_at: new Date().toISOString()
     },
     {
       user_id: 'u-owner-1',
-      email: 'owner@korea-land.or.kr',
+      email: 'uofficekr@gmail.com',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
       nickname: '한국지역개발토지분석원',
       name: '홍길동',
-      phone_number: '010-9876-5432',
+      phone_number: '010-1111-2222',
       role: 'OWNER',
       created_at: new Date().toISOString()
     },
     {
       user_id: 'u-staff-1',
-      email: 'staff1@korea-land.or.kr',
+      email: 'wuaera@gmail.com',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '김조사연구원',
+      nickname: '토지조사원',
       name: '김철수',
       phone_number: '010-3333-4444',
       role: 'STAFF',
@@ -114,9 +114,9 @@ const inMemoryDB = {
     },
     {
       user_id: 'u-member-1',
-      email: 'member1@korea-land.or.kr',
+      email: 'a4uprint@gmail.com',
       password_hash: '$2b$10$wT8Zz.xR7K8qH9.u8Y9pOOZk/Z5M/V6Jb/TqK6V5l4O6J1R8u0J1e',
-      nickname: '토지투자왕',
+      nickname: '회원',
       name: '이영희',
       phone_number: '010-5555-6666',
       role: 'MEMBER',
@@ -127,7 +127,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-101',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '강원도 평창군 대관령면 수하리 청정 임야 토지',
       address: '강원특별자치도 평창군 대관령면 수하리 산 45-2',
       jimok_official: '임',
@@ -147,11 +147,11 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 2).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김조사연구원',
+          requester_name: '토지조사원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000).toISOString(),
           decider_id: 'u-owner-1',
-          decider_name: '박대표',
+          decider_name: '한국지역개발토지분석원',
           rejection_reason: ''
         }
       ],
@@ -160,7 +160,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-102',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '충남 당진시 신평면 금천리 도로 접한 넓은 밭(전)',
       address: '충청남도 당진시 신평면 금천리 123-5',
       jimok_official: '전',
@@ -180,11 +180,11 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 3).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김조사연구원',
+          requester_name: '토지조사원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000 * 2).toISOString(),
           decider_id: 'u-owner-1',
-          decider_name: '박대표',
+          decider_name: '한국지역개발토지분석원',
           rejection_reason: ''
         }
       ],
@@ -193,7 +193,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-103',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '경기 용인시 처인구 양지면 대지 (즉시 건축 가능)',
       address: '경기도 용인시 처인구 양지면 양지리 78-1',
       jimok_official: '대',
@@ -213,11 +213,11 @@ const inMemoryDB = {
           request_type: 'REGISTRATION',
           request_time: new Date(Date.now() - 86400000 * 4).toISOString(),
           requester_id: 'u-staff-1',
-          requester_name: '김조사연구원',
+          requester_name: '토지조사원',
           status: 'APPROVED',
           decision_time: new Date(Date.now() - 86400000 * 3).toISOString(),
           decider_id: 'u-owner-1',
-          decider_name: '박대표',
+          decider_name: '한국지역개발토지분석원',
           rejection_reason: ''
         }
       ],
@@ -226,7 +226,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-104',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '(임야) 경기도 포천시 창수면 가양리 369-6',
       address: '경기도 포천시 창수면 가양리 369-6',
       jimok_official: '임',
@@ -246,7 +246,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-105',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '(대지) 경기도 양주시 고암동 603-7',
       address: '경기도 양주시 고암동 603-7',
       jimok_official: '대',
@@ -266,7 +266,7 @@ const inMemoryDB = {
     {
       listing_id: 'lnd-106',
       assistant_id: 'u-staff-1',
-      assistant_nickname: '김조사연구원',
+      assistant_nickname: '토지조사원',
       title: '(공장용지) 경기도 포천시 내촌면 마명리 337',
       address: '경기도 포천시 내촌면 마명리 337',
       jimok_official: '장',
@@ -1865,7 +1865,7 @@ app.post('/api/payments/confirm', authenticateToken, async (req, res) => {
 
   const staff = inMemoryDB.users.find(u => u.user_id === listing.assistant_id) || {
     nickname: listing.assistant_nickname,
-    email: 'staff@korea-land.or.kr',
+    email: 'wuaera@gmail.com',
     phone_number: '010-3333-4444'
   };
 
