@@ -1,6 +1,6 @@
 {
-  "name": "StarRealtor Land",
-  "description": "StarRealtor Land Brokerage Platform with Google Meet Schedule Matching, 360 Panorama VR, and Secure PDF Viewer",
+  "name": "한국지역개발토지분석원",
+  "description": "한국지역개발토지분석원 토지 분석, 360° VR 및 VWORLD 지적도/위성도 연동 플랫폼",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
