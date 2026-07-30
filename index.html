@@ -47,6 +47,11 @@
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';</script>
     <!-- PortOne / IAMPORT SDK -->
     <script src="https://cdn.iamport.kr/v1/iamport.js"></script>
+    <!-- Leaflet & Leaflet Draw CDN for GIS Geofencing -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
     <style>
         body {
             font-family: 'Plus Jakarta Sans', 'Noto Sans KR', sans-serif;
@@ -226,6 +231,124 @@
                         <div class="text-[10px] text-black/50 font-bold uppercase tracking-[0.15em]">공간정보관리법 28개 지목 필터:</div>
                         <div class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-3 bg-[#F5F2ED] border border-black/5" id="jimok-tags-container">
                             <!-- JS populated 28 Jimoks -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- GIS GEOFENCING GOOGLE MAP & LAND SEARCH SECTION -->
+            <section id="gis-geofencing-section" class="bg-white border border-black/10 p-6 md:p-8 space-y-6 shadow-xs">
+                <!-- Header -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-black/10 pb-4">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="bg-[#3A5A40] text-white text-[10px] uppercase font-bold tracking-widest px-2.5 py-0.5">
+                                GIS &amp; Geofencing Map
+                            </span>
+                            <span class="text-xs font-bold text-black/50">대한민국 전역 실시간 공간 분석</span>
+                        </div>
+                        <h3 class="text-2xl font-serif italic text-[#1A1A1A] mt-1">
+                            대한민국 GIS 토지 지오펜싱(Geofencing) 스마트 지도
+                        </h3>
+                        <p class="text-xs text-black/60 mt-1">
+                            토지의 지번/주소를 직접 검색하거나, 지도 상에 마우스로 영역(다각형/원/사각형)을 직접 그려 내부 GPS 위치의 토지를 실시간 리스팅 및 카드에 담을 수 있습니다.
+                        </p>
+                    </div>
+
+                    <!-- Controls Toolbar -->
+                    <div class="flex items-center gap-2 flex-wrap text-xs">
+                        <button id="geo-btn-polygon" onclick="setGeofenceMode('polygon')" class="geo-tool-btn bg-[#F5F2ED] hover:bg-[#3A5A40] hover:text-white border border-black/15 px-3 py-1.5 font-bold transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-draw-polygon"></i> <span>다각형 실선 그리기</span>
+                        </button>
+                        <button id="geo-btn-polyline" onclick="setGeofenceMode('polyline')" class="geo-tool-btn bg-[#F5F2ED] hover:bg-[#3A5A40] hover:text-white border border-black/15 px-3 py-1.5 font-bold transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-pen-nib"></i> <span>자유 실선 패스</span>
+                        </button>
+                        <button id="geo-btn-circle" onclick="setGeofenceMode('circle')" class="geo-tool-btn bg-[#F5F2ED] hover:bg-[#3A5A40] hover:text-white border border-black/15 px-3 py-1.5 font-bold transition flex items-center gap-1.5">
+                            <i class="fa-circle-dot fa-regular"></i> <span>원형 범위 (반경)</span>
+                        </button>
+                        <button id="geo-btn-rect" onclick="setGeofenceMode('rect')" class="geo-tool-btn bg-[#F5F2ED] hover:bg-[#3A5A40] hover:text-white border border-black/15 px-3 py-1.5 font-bold transition flex items-center gap-1.5">
+                            <i class="fa-vector-square fa-solid"></i> <span>사각형 범위</span>
+                        </button>
+                        <button onclick="confirmGeofenceVWorldAnalysis()" id="btn-vworld-confirm" disabled class="bg-[#3A5A40] text-white disabled:bg-black/20 hover:bg-[#2A422F] px-3.5 py-1.5 font-extrabold transition flex items-center gap-1.5 shadow-xs">
+                            <i class="fa-solid fa-[#ffffff] fa-check-circle"></i> <span>확인 (VWORLD 분석 실행)</span>
+                        </button>
+                        <button onclick="clearGeofence()" class="bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 font-bold transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-rotate-left"></i> <span>영역 초기화</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Search Bar & Map Layer Select -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-[#F5F2ED] p-3 border border-black/10">
+                    <!-- Address Search -->
+                    <div class="md:col-span-8 flex items-center bg-white border border-black/15 p-1.5 focus-within:border-[#3A5A40]">
+                        <i class="fa-solid fa-location-dot text-[#3A5A40] ml-2 mr-2 text-xs"></i>
+                        <input type="text" id="geofence-address-input" onkeypress="if(event.key==='Enter') searchGeofenceJibun()" placeholder="지번 또는 소재지 검색 (예: 강원특별자치도 평창군 수하리 산 45-2, 당진시 금천리, 포천시 가양리...)" class="w-full bg-transparent text-xs focus:outline-none py-1">
+                        <button onclick="searchGeofenceJibun()" class="bg-[#3A5A40] text-white text-xs px-4 py-1.5 font-bold hover:bg-[#2A422F] transition whitespace-nowrap">
+                            지번 이동
+                        </button>
+                    </div>
+
+                    <!-- Layer Selector -->
+                    <div class="md:col-span-4 flex items-center gap-2 justify-end">
+                        <label class="text-[11px] font-bold text-black/60 whitespace-nowrap">지도 레이어:</label>
+                        <select id="map-tile-select" onchange="changeMapTileLayer(this.value)" class="bg-white border border-black/15 p-1.5 text-xs font-bold text-[#3A5A40] focus:outline-none w-full">
+                            <option value="google-hybrid">Google Hybrid (위성 + 도로/지명)</option>
+                            <option value="google-satellite">Google Satellite (고해상도 위성)</option>
+                            <option value="google-roadmap">Google Maps (일반 지적 도로망)</option>
+                            <option value="google-terrain">Google Terrain (지형 지세도)</option>
+                            <option value="osm">OpenStreetMap</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Map & Side Status Split Container -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Leaflet Map Container -->
+                    <div class="lg:col-span-8 relative">
+                        <div id="landing-geofence-map" class="w-full h-[480px] border border-black/15 rounded-sm shadow-inner z-10"></div>
+                        
+                        <!-- Drawing Instruction Overlay Badge -->
+                        <div id="geofence-hint-badge" class="absolute top-3 left-3 z-20 bg-black/80 text-white text-xs px-3 py-1.5 rounded shadow-lg backdrop-blur-xs flex items-center gap-2 pointer-events-none">
+                            <i class="fa-solid fa-hand-pointer text-amber-400"></i>
+                            <span id="geofence-hint-text">상단 도구를 선택하거나 지도를 클릭하여 지오펜싱(Geofencing) 존을 지정하세요.</span>
+                        </div>
+                    </div>
+
+                    <!-- Geofence Results & Quick Add to Cart Panel -->
+                    <div class="lg:col-span-4 bg-[#F5F2ED] p-4 border border-black/10 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-center border-b border-black/10 pb-2 mb-3">
+                                <div class="flex items-center gap-2">
+                                    <input type="checkbox" id="geofence-select-all-cb" onchange="toggleSelectAllGeofenceItems(this.checked)" class="w-3.5 h-3.5 accent-[#3A5A40] cursor-pointer">
+                                    <span class="text-xs font-bold text-[#3A5A40] uppercase tracking-wider flex items-center gap-1">
+                                        <i class="fa-solid fa-filter"></i> 지오펜싱 포획 토지
+                                    </span>
+                                </div>
+                                <span class="bg-[#3A5A40] text-white font-extrabold text-[11px] px-2 py-0.5 rounded-full" id="geofence-matched-count">
+                                    0건 발견
+                                </span>
+                            </div>
+
+                            <!-- Matched Items List Scroll Container -->
+                            <div id="geofence-results-container" class="space-y-2.5 max-h-[360px] overflow-y-auto pr-1">
+                                <div class="text-center py-10 text-xs text-black/40">
+                                    <i class="fa-solid fa-map-location-dot text-2xl mb-2 text-black/20 block"></i>
+                                    지오펜싱 영역을 그리거나 상단 '확인 (VWORLD 분석 실행)'을 누르면 영역 내부의 토지 매물이 리스팅 및 체크박스로 선택 가능합니다.
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Batch Action Buttons -->
+                        <div class="pt-3 border-t border-black/10 space-y-2">
+                            <button onclick="addSelectedGeofenceItemsToCart()" id="btn-selected-add-cart" disabled class="w-full bg-[#3A5A40] disabled:bg-black/20 hover:bg-[#2A422F] text-white font-bold py-2.5 text-xs uppercase tracking-wider transition shadow-sm flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-cart-plus"></i>
+                                <span id="btn-selected-cart-text">선택된 토지 카트에 담기</span>
+                            </button>
+                            <button onclick="addMatchedGeofenceListingsToCart()" id="btn-batch-add-cart" disabled class="w-full bg-stone-800 disabled:bg-black/20 hover:bg-black text-white font-bold py-2 text-[11px] uppercase tracking-wider transition flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-layer-group"></i>
+                                <span>포획 전체 매물 일괄 담기</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1223,6 +1346,7 @@
                 const res = await fetch('/api/listings');
                 currentListings = await res.json();
                 renderListingsGrid(currentListings);
+                initLandingGeofenceMap();
             } catch (err) {
                 console.error('Failed to fetch listings:', err);
             }
@@ -2074,10 +2198,593 @@ ${apisListStr}
                 alert(`[PDF 보안 열람 오류] ${err.message}`);
             }
         }
-        async function addToCartDirect(listingId) {
+        // -------------------------------------------------------------
+        // GIS GEOFENCING GOOGLE MAP CONTROLLER & LAT/LNG LOGIC
+        // -------------------------------------------------------------
+        let landingMap = null;
+        let drawnGeofenceLayer = null;
+        let geofenceDrawControl = null;
+        let currentTileLayer = null;
+        let listingMarkers = [];
+        let matchedGeofenceListings = [];
+        let koreaMaskLayer = null;
+
+        function isPointInKorea(lat, lng) {
+            return lat >= 33.0 && lat <= 38.9 && lng >= 124.0 && lng <= 132.0;
+        }
+
+        function getListingLatLng(item) {
+            if (item.lat && item.lng) return { lat: Number(item.lat), lng: Number(item.lng) };
+            if (item.spatial_coords && item.spatial_coords.lat) {
+                return { lat: Number(item.spatial_coords.lat), lng: Number(item.spatial_coords.lng) };
+            }
+            const addr = item.address || item.title || '';
+            if (addr.includes('평창')) return { lat: 37.6651, lng: 128.7182 };
+            if (addr.includes('당진')) return { lat: 36.8921, lng: 126.7112 };
+            if (addr.includes('용인')) return { lat: 37.2348, lng: 127.2891 };
+            if (addr.includes('포천') && addr.includes('가양')) return { lat: 37.9823, lng: 127.1845 };
+            if (addr.includes('포천') && addr.includes('마명')) return { lat: 37.7923, lng: 127.2456 };
+            if (addr.includes('양주')) return { lat: 37.8212, lng: 127.0612 };
+            return { lat: 37.5665, lng: 126.9780 };
+        }
+
+        function isPointInPolygon(point, polygonCoords) {
+            const x = point[1], y = point[0]; // x = lng, y = lat
+            let inside = false;
+            for (let i = 0, j = polygonCoords.length - 1; i < polygonCoords.length; j = i++) {
+                const xi = polygonCoords[i][1], yi = polygonCoords[i][0];
+                const xj = polygonCoords[j][1], yj = polygonCoords[j][0];
+                const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function addKoreaOnlyMaskOverlay(map) {
+            if (koreaMaskLayer && map) map.removeLayer(koreaMaskLayer);
+            
+            // Outer World bounding box
+            const outerWorld = [
+                [90, -180], [90, 180], [-90, 180], [-90, -180]
+            ];
+            // Detailed South Korea Territory Hole (Jeju, Dokdo, Ulleung, Peninsula)
+            const koreaHole = [
+                [38.9, 124.2],
+                [38.9, 128.6],
+                [38.6, 129.8],
+                [37.6, 131.9], // Dokdo & Ulleungdo
+                [33.1, 131.2],
+                [33.0, 126.0], // Jeju Island
+                [34.1, 124.2],
+                [38.9, 124.2]
+            ];
+
+            koreaMaskLayer = L.polygon([outerWorld, koreaHole], {
+                color: '#0f172a',
+                weight: 2,
+                fillColor: '#0f172a',
+                fillOpacity: 0.60,
+                interactive: false,
+                className: 'korea-mask-dark-overlay'
+            });
+
+            koreaMaskLayer.addTo(map);
+        }
+
+        function initLandingGeofenceMap() {
+            if (landingMap) {
+                landingMap.invalidateSize();
+                refreshGeofenceListingMarkers();
+                return;
+            }
+            const mapContainer = document.getElementById('landing-geofence-map');
+            if (!mapContainer || !window.L) return;
+
+            // Korea bounds restriction
+            const koreaBounds = L.latLngBounds([32.5, 123.0], [39.5, 132.5]);
+
+            // Center map on South Korea [36.25, 127.75], zoom 7 (all Korea visible)
+            landingMap = L.map('landing-geofence-map', {
+                center: [36.25, 127.75],
+                zoom: 7,
+                minZoom: 6,
+                maxZoom: 19,
+                maxBounds: koreaBounds,
+                maxBoundsViscosity: 0.8,
+                zoomControl: true
+            });
+
+            // Google Tile Layers (Hybrid, Satellite, Roadmap, Terrain) + OSM
+            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                attribution: 'Map data © Google'
+            });
+
+            currentTileLayer = googleHybrid;
+            currentTileLayer.addTo(landingMap);
+
+            // Add Korea-only blur/dark mask overlay
+            addKoreaOnlyMaskOverlay(landingMap);
+
+            const drawnItems = new L.FeatureGroup();
+            landingMap.addLayer(drawnItems);
+
+            if (L.Control && L.Control.Draw) {
+                geofenceDrawControl = new L.Control.Draw({
+                    draw: {
+                        polygon: {
+                            shapeOptions: { color: '#15803d', fillColor: '#22c55e', fillOpacity: 0.28, weight: 3.5, dashArray: null }
+                        },
+                        polyline: {
+                            shapeOptions: { color: '#16a34a', weight: 4, opacity: 1.0, dashArray: null }
+                        },
+                        circle: {
+                            shapeOptions: { color: '#0284c7', fillColor: '#38bdf8', fillOpacity: 0.25, weight: 3 }
+                        },
+                        rectangle: {
+                            shapeOptions: { color: '#d97706', fillColor: '#fbbf24', fillOpacity: 0.25, weight: 3 }
+                        },
+                        marker: false,
+                        circlemarker: false
+                    },
+                    edit: {
+                        featureGroup: drawnItems,
+                        remove: true
+                    }
+                });
+                landingMap.addControl(geofenceDrawControl);
+
+                landingMap.on(L.Draw.Event.CREATED, function (e) {
+                    let layer = e.layer;
+
+                    // If a polyline/line path was drawn, auto-close the end point back to the start point to form a closed polygon
+                    if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+                        const latLngs = layer.getLatLngs();
+                        if (latLngs && latLngs.length >= 3) {
+                            layer = L.polygon(latLngs, {
+                                color: '#15803d',
+                                fillColor: '#22c55e',
+                                fillOpacity: 0.28,
+                                weight: 3.5
+                            });
+                        }
+                    }
+
+                    // Korea boundary check
+                    let layerCenter = null;
+                    if (layer instanceof L.Circle) {
+                        layerCenter = layer.getLatLng();
+                    } else if (layer.getBounds) {
+                        layerCenter = layer.getBounds().getCenter();
+                    }
+
+                    if (layerCenter && !isPointInKorea(layerCenter.lat, layerCenter.lng)) {
+                        alert('⚠️ [대한민국 영토 제약] 지오펜싱 분석은 대한민국(국내) 토지 영역 내에서만 실행 가능합니다.');
+                        return;
+                    }
+
+                    drawnItems.clearLayers();
+                    drawnItems.addLayer(layer);
+                    drawnGeofenceLayer = layer;
+
+                    // Enable VWORLD confirm button
+                    const btnConfirm = document.getElementById('btn-vworld-confirm');
+                    if (btnConfirm) btnConfirm.disabled = false;
+
+                    processGeofenceFilter(layer);
+                });
+
+                landingMap.on(L.Draw.Event.EDITED, function () {
+                    if (drawnGeofenceLayer) {
+                        processGeofenceFilter(drawnGeofenceLayer);
+                    }
+                });
+
+                landingMap.on(L.Draw.Event.DELETED, function () {
+                    clearGeofence();
+                });
+            }
+
+            refreshGeofenceListingMarkers();
+        }
+
+        function changeMapTileLayer(type) {
+            if (!landingMap) return;
+            if (currentTileLayer) landingMap.removeLayer(currentTileLayer);
+
+            let newLayer;
+            if (type === 'google-hybrid') {
+                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 20 });
+            } else if (type === 'google-satellite') {
+                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', { maxZoom: 20 });
+            } else if (type === 'google-roadmap') {
+                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', { maxZoom: 20 });
+            } else if (type === 'google-terrain') {
+                newLayer = L.tileLayer('https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}', { maxZoom: 20 });
+            } else {
+                newLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
+            }
+
+            currentTileLayer = newLayer;
+            currentTileLayer.addTo(landingMap);
+
+            if (koreaMaskLayer) {
+                koreaMaskLayer.bringToFront();
+            }
+        }
+
+        function setGeofenceMode(mode) {
+            if (!landingMap) return;
+            const badge = document.getElementById('geofence-hint-text');
+            if (mode === 'polygon') {
+                if (badge) badge.innerText = '마우스 클릭으로 점을 연결하여 다각형 실선 지오펜싱 존을 그리세요.';
+                if (geofenceDrawControl) new L.Draw.Polygon(landingMap, geofenceDrawControl.options.draw.polygon).enable();
+            } else if (mode === 'polyline') {
+                if (badge) badge.innerText = '마우스를 클릭 및 이어서 끌어 실선 자유 패스 존을 지정하세요.';
+                if (geofenceDrawControl) new L.Draw.Polyline(landingMap, geofenceDrawControl.options.draw.polyline).enable();
+            } else if (mode === 'circle') {
+                if (badge) badge.innerText = '마우스 클릭 후 드래그하여 원형 지오펜싱 반경 영역을 그리세요.';
+                if (geofenceDrawControl) new L.Draw.Circle(landingMap, geofenceDrawControl.options.draw.circle).enable();
+            } else if (mode === 'rect') {
+                if (badge) badge.innerText = '마우스를 드래그하여 사각형 지오펜싱 영역을 지정하세요.';
+                if (geofenceDrawControl) new L.Draw.Rectangle(landingMap, geofenceDrawControl.options.draw.rectangle).enable();
+            }
+        }
+
+        function clearGeofence() {
+            if (landingMap) {
+                landingMap.eachLayer(layer => {
+                    if ((layer instanceof L.Polygon || layer instanceof L.Circle || layer instanceof L.Rectangle || layer instanceof L.Polyline) &&
+                        layer !== currentTileLayer && layer !== koreaMaskLayer && !listingMarkers.includes(layer)) {
+                        landingMap.removeLayer(layer);
+                    }
+                });
+            }
+            drawnGeofenceLayer = null;
+            matchedGeofenceListings = [];
+
+            const btnConfirm = document.getElementById('btn-vworld-confirm');
+            if (btnConfirm) btnConfirm.disabled = true;
+
+            const badge = document.getElementById('geofence-hint-text');
+            if (badge) badge.innerText = '지오펜싱 영역이 초기화되었습니다. 상단 도구를 눌러 대한민국 영역에 그리세요.';
+
+            refreshGeofenceListingMarkers();
+            renderGeofenceMatchedResults([]);
+        }
+
+        function processGeofenceFilter(layer) {
+            matchedGeofenceListings = [];
+
+            currentListings.forEach(item => {
+                const coords = getListingLatLng(item);
+                const latLng = L.latLng(coords.lat, coords.lng);
+
+                let isInside = false;
+
+                if (layer instanceof L.Circle) {
+                    const center = layer.getLatLng();
+                    const radius = layer.getRadius();
+                    isInside = center.distanceTo(latLng) <= radius;
+                } else if (layer instanceof L.Polyline && !(layer instanceof L.Polygon)) {
+                    // Polyline buffer distance check (~100m)
+                    const pts = layer.getLatLngs();
+                    for (let pt of pts) {
+                        if (pt.distanceTo(latLng) <= 250) { isInside = true; break; }
+                    }
+                } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
+                    const latLngs = layer.getLatLngs()[0];
+                    const polyCoords = latLngs.map(pt => [pt.lat, pt.lng]);
+                    isInside = isPointInPolygon([coords.lat, coords.lng], polyCoords);
+                }
+
+                if (isInside) {
+                    matchedGeofenceListings.push(item);
+                }
+            });
+
+            const badge = document.getElementById('geofence-hint-text');
+            if (badge) badge.innerText = `지오펜싱 영역 지정 완료: 총 ${matchedGeofenceListings.length}건의 토지가 영역 내에서 발견되었습니다. '확인' 버튼을 클릭하세요.`;
+
+            highlightGeofenceMarkers(matchedGeofenceListings);
+            renderGeofenceMatchedResults(matchedGeofenceListings);
+        }
+
+        async function confirmGeofenceVWorldAnalysis() {
+            if (!drawnGeofenceLayer) {
+                alert('지오펜싱 존을 지도에 먼저 그려주세요.');
+                return;
+            }
+
+            let centerLat = 36.25, centerLng = 127.75;
+            if (drawnGeofenceLayer instanceof L.Circle) {
+                const c = drawnGeofenceLayer.getLatLng();
+                centerLat = c.lat; centerLng = c.lng;
+            } else if (drawnGeofenceLayer.getBounds) {
+                const c = drawnGeofenceLayer.getBounds().getCenter();
+                centerLat = c.lat; centerLng = c.lng;
+            }
+
+            if (!isPointInKorea(centerLat, centerLng)) {
+                alert('⚠️ 대한민국 영토 범위를 벗어난 지역입니다. 대한민국 국내 영역에 지오펜싱 존을 그려주세요.');
+                return;
+            }
+
+            try {
+                // Call VWORLD Public Land Lookup API with coordinates
+                const res = await fetch('/api/public-land-api/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        coordinates: { lat: centerLat, lng: centerLng }
+                    })
+                });
+
+                const vworldData = await res.json();
+                console.log('VWORLD Analysis Output:', vworldData);
+
+                processGeofenceFilter(drawnGeofenceLayer);
+
+                alert(`✅ [VWORLD 분석 완료] 선택된 지오펜싱 영역 GPS (${centerLat.toFixed(4)}, ${centerLng.toFixed(4)}) 기반 VWORLD 지번 조회가 완료되었습니다.\n총 ${matchedGeofenceListings.length}건의 필지가 리스팅되었습니다.`);
+            } catch (err) {
+                console.error('VWORLD Analysis Error:', err);
+                processGeofenceFilter(drawnGeofenceLayer);
+            }
+        }
+
+        function highlightGeofenceMarkers(matchedList) {
+            const matchedIds = matchedList.map(m => m.listing_id);
+
+            listingMarkers.forEach(m => {
+                if (matchedIds.includes(m.listingId)) {
+                    m.setIcon(L.divIcon({
+                        className: 'custom-geofence-pin-matched',
+                        html: `<div class="bg-emerald-600 text-white font-extrabold text-[11px] px-2.5 py-1 rounded shadow-lg border-2 border-amber-300 animate-bounce flex items-center gap-1">
+                                  📍 ${m.listingTitle} (포획)
+                               </div>`,
+                        iconSize: [130, 32],
+                        iconAnchor: [65, 16]
+                    }));
+                    m.setZIndexOffset(1000);
+                } else {
+                    m.setIcon(L.divIcon({
+                        className: 'custom-geofence-pin',
+                        html: `<div class="bg-[#3A5A40] text-white font-bold text-[10px] px-2 py-0.5 rounded shadow border border-white">
+                                  ${m.listingTitle}
+                               </div>`,
+                        iconSize: [110, 24],
+                        iconAnchor: [55, 12]
+                    }));
+                    m.setZIndexOffset(0);
+                }
+            });
+        }
+
+        function refreshGeofenceListingMarkers() {
+            if (!landingMap) return;
+
+            listingMarkers.forEach(m => landingMap.removeLayer(m));
+            listingMarkers = [];
+
+            if (!currentListings || currentListings.length === 0) return;
+
+            currentListings.forEach(item => {
+                const coords = getListingLatLng(item);
+
+                const marker = L.marker([coords.lat, coords.lng], {
+                    icon: L.divIcon({
+                        className: 'custom-geofence-pin',
+                        html: `<div class="bg-[#3A5A40] text-white font-bold text-[10px] px-2 py-0.5 rounded shadow border border-white">
+                                  ${item.jimok_official}: ${item.title.substring(0, 12)}...
+                               </div>`,
+                        iconSize: [110, 24],
+                        iconAnchor: [55, 12]
+                    })
+                }).addTo(landingMap);
+
+                marker.listingId = item.listing_id;
+                marker.listingTitle = item.title;
+
+                marker.bindPopup(`
+                    <div class="p-1.5 space-y-1.5 text-xs">
+                        <span class="bg-[#3A5A40] text-white font-bold text-[10px] px-1.5 py-0.5 rounded">지목: ${item.jimok_official}</span>
+                        <strong class="block text-sm text-[#1A1A1A] mt-1 font-serif italic">${item.title}</strong>
+                        <p class="text-black/70 text-[11px]">${item.address}</p>
+                        <div class="font-bold text-[#3A5A40] text-xs">
+                            공시가: ${(item.price / 100000000).toFixed(1)}억원 | 면적: ${item.area_sqm}㎡
+                        </div>
+                        <div class="pt-1.5 flex gap-1.5">
+                            <button onclick="addToCartDirect('${item.listing_id}')" class="bg-[#3A5A40] text-white text-[11px] font-bold px-2 py-1 rounded w-full hover:bg-[#2A422F] transition">
+                                🛒 카드에 담기
+                            </button>
+                            <button onclick="openListingDetail('${item.listing_id}')" class="bg-stone-800 text-white text-[11px] font-bold px-2 py-1 rounded w-full hover:bg-black transition">
+                                상세보기
+                            </button>
+                        </div>
+                    </div>
+                `);
+
+                listingMarkers.push(marker);
+            });
+        }
+
+        async function searchGeofenceJibun() {
+            const input = document.getElementById('geofence-address-input');
+            if (!input || !input.value.trim()) {
+                alert('검색할 지번 또는 주소를 입력해주세요.');
+                return;
+            }
+
+            const query = input.value.trim();
+
+            try {
+                const res = await fetch('/api/public-land-api/lookup', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: query })
+                });
+
+                const data = await res.json();
+                let targetLat = 36.25;
+                let targetLng = 127.75;
+
+                if (res.ok && data.coordinates) {
+                    targetLat = data.coordinates.lat;
+                    targetLng = data.coordinates.lng;
+                } else {
+                    if (query.includes('평창')) { targetLat = 37.6651; targetLng = 128.7182; }
+                    else if (query.includes('당진')) { targetLat = 36.8921; targetLng = 126.7112; }
+                    else if (query.includes('용인')) { targetLat = 37.2348; targetLng = 127.2891; }
+                    else if (query.includes('포천')) { targetLat = 37.9823; targetLng = 127.1845; }
+                    else if (query.includes('양주')) { targetLat = 37.8212; targetLng = 127.0612; }
+                }
+
+                if (!isPointInKorea(targetLat, targetLng)) {
+                    alert('검색된 위치가 대한민국 영토 범위를 벗어납니다.');
+                    return;
+                }
+
+                if (landingMap) {
+                    landingMap.flyTo([targetLat, targetLng], 15, { duration: 1.5 });
+
+                    const searchMarker = L.marker([targetLat, targetLng], {
+                        icon: L.divIcon({
+                            className: 'search-target-pin',
+                            html: `<div class="bg-rose-700 text-white font-extrabold text-xs px-3 py-1 rounded-full shadow-lg border-2 border-white animate-pulse">
+                                      📍 지번 위치: ${query}
+                                   </div>`,
+                            iconSize: [160, 30],
+                            iconAnchor: [80, 15]
+                        })
+                    }).addTo(landingMap);
+
+                    searchMarker.bindPopup(`
+                        <div class="p-2 text-xs space-y-1">
+                            <strong class="text-rose-700 block">📍 지적 지번 위치 검색 완료</strong>
+                            <p class="font-bold">${query}</p>
+                            <p class="text-[11px] text-slate-600">GPS 좌표: ${targetLat.toFixed(5)}, ${targetLng.toFixed(5)}</p>
+                        </div>
+                    `).openPopup();
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function renderGeofenceMatchedResults(matchedList) {
+            const container = document.getElementById('geofence-results-container');
+            const countBadge = document.getElementById('geofence-matched-count');
+            const batchBtn = document.getElementById('btn-batch-add-cart');
+            const selectedBtn = document.getElementById('btn-selected-add-cart');
+
+            if (countBadge) countBadge.innerText = `${matchedList.length}건 발견`;
+
+            if (!container) return;
+
+            if (matchedList.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-10 text-xs text-black/40">
+                        <i class="fa-solid fa-map-location-dot text-2xl mb-2 text-black/20 block"></i>
+                        지오펜싱 영역 내부에서 발견된 토지가 없습니다. 영역을 재지정하거나 상단 '확인 (VWORLD 분석 실행)'을 누르세요.
+                    </div>
+                `;
+                if (batchBtn) batchBtn.disabled = true;
+                if (selectedBtn) selectedBtn.disabled = true;
+                return;
+            }
+
+            if (batchBtn) batchBtn.disabled = false;
+            if (selectedBtn) selectedBtn.disabled = false;
+
+            let html = '';
+            matchedList.forEach(item => {
+                html += `
+                    <div class="bg-white p-3 border border-black/10 shadow-2xs space-y-2 hover:border-[#3A5A40] transition">
+                        <div class="flex items-start justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <input type="checkbox" class="geofence-item-cb cursor-pointer w-4 h-4 accent-[#3A5A40]" data-id="${item.listing_id}" onchange="updateSelectedGeofenceCountUI()" checked>
+                                <div>
+                                    <span class="bg-[#3A5A40] text-white text-[10px] font-bold px-1.5 py-0.2 uppercase">지목: ${item.jimok_official}</span>
+                                    <h4 class="font-serif italic font-bold text-xs text-[#1A1A1A] mt-0.5">${item.title}</h4>
+                                </div>
+                            </div>
+                            <span class="font-bold text-[#3A5A40] text-xs whitespace-nowrap">${(item.price / 100000000).toFixed(1)}억원</span>
+                        </div>
+                        <p class="text-[11px] text-black/60 truncate pl-6">${item.address}</p>
+                        <div class="flex justify-between items-center text-[10px] text-black/50 pt-1 border-t border-black/5">
+                            <span class="pl-6">면적: ${item.area_sqm}㎡</span>
+                            <button onclick="addToCartDirect('${item.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold px-2.5 py-1 rounded transition flex items-center gap-1 shadow-2xs">
+                                <i class="fa-solid fa-cart-plus"></i> 카드에 담기
+                            </button>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+            updateSelectedGeofenceCountUI();
+        }
+
+        function toggleSelectAllGeofenceItems(checked) {
+            const checkboxes = document.querySelectorAll('.geofence-item-cb');
+            checkboxes.forEach(cb => { cb.checked = checked; });
+            updateSelectedGeofenceCountUI();
+        }
+
+        function updateSelectedGeofenceCountUI() {
+            const checkboxes = document.querySelectorAll('.geofence-item-cb:checked');
+            const count = checkboxes.length;
+            const btnText = document.getElementById('btn-selected-cart-text');
+            const selectedBtn = document.getElementById('btn-selected-add-cart');
+
+            if (btnText) btnText.innerText = `선택된 ${count}개 토지 카트에 담기`;
+            if (selectedBtn) selectedBtn.disabled = (count === 0);
+        }
+
+        async function addSelectedGeofenceItemsToCart() {
+            const checkboxes = document.querySelectorAll('.geofence-item-cb:checked');
+            if (checkboxes.length === 0) {
+                alert('카트에 담을 토지를 선택해주세요.');
+                return;
+            }
+
+            let successCount = 0;
+            for (const cb of checkboxes) {
+                const listingId = cb.getAttribute('data-id');
+                if (listingId) {
+                    await addToCartDirect(listingId, true);
+                    successCount++;
+                }
+            }
+
+            alert(`🛒 선택한 총 ${successCount}건의 지적 지번 토지가 관심 카트에 추가되었습니다!`);
+            updateCartBadge();
+        }
+
+        async function addMatchedGeofenceListingsToCart() {
+            if (matchedGeofenceListings.length === 0) return;
+
+            let successCount = 0;
+            for (const item of matchedGeofenceListings) {
+                await addToCartDirect(item.listing_id, true);
+                successCount++;
+            }
+
+            alert(`✅ 지오펜싱 영역에 포함된 총 ${successCount}건의 토지 매물이 내 카드(쇼핑카트)에 담겼습니다!`);
+            updateCartBadge();
+        }
+
+        async function addToCartDirect(listingId, silent = false) {
             if (!currentUser) {
-                alert('관심 토지을 담으려면 로그인이 필요합니다.');
-                openModal('login-modal');
+                let guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
+                if (!guestCart.includes(listingId)) {
+                    guestCart.push(listingId);
+                    localStorage.setItem('guest_cart_listings', JSON.stringify(guestCart));
+                }
+                if (!silent) {
+                    alert('🛒 비회원 관심 카트에 담겼습니다. (상단 Cart에서 확인 및 로그인 시 통합)');
+                }
+                updateCartBadge();
                 return;
             }
 
@@ -2093,10 +2800,12 @@ ${apisListStr}
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || '담기 실패');
 
-                alert('관심 토지(쇼핑카드)에 추가되었습니다.');
+                if (!silent) {
+                    alert('🛒 관심 토지(쇼핑카드)에 추가되었습니다.');
+                }
                 updateCartBadge();
             } catch (err) {
-                alert(err.message);
+                if (!silent) alert(err.message);
             }
         }
 
@@ -2107,82 +2816,98 @@ ${apisListStr}
         }
 
         async function updateCartBadge() {
-            if (!currentUser) return;
-            try {
-                const res = await fetch('/api/cart', {
-                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
-                });
-                const items = await res.json();
-                document.getElementById('cart-badge-count').innerText = items.length;
-            } catch (e) {
-                console.error(e);
+            let count = 0;
+            if (currentUser) {
+                try {
+                    const res = await fetch('/api/cart', {
+                        headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                    });
+                    const items = await res.json();
+                    count = Array.isArray(items) ? items.length : 0;
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                const guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
+                count = guestCart.length;
             }
+            const badge = document.getElementById('cart-badge-count');
+            if (badge) badge.innerText = count;
         }
 
         async function openCartModal() {
-            if (!currentUser) {
-                alert('로그인이 필요합니다.');
-                openModal('login-modal');
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/cart', {
-                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
-                });
-                const items = await res.json();
-
-                const list = document.getElementById('cart-items-list');
-                list.innerHTML = '';
-                document.getElementById('cart-total-count').innerText = items.length;
-
-                if (items.length === 0) {
-                    list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 토지이 없습니다.</p>`;
-                } else {
-                    items.forEach(c => {
-                        list.innerHTML += `
-                            <div class="p-3 bg-[#F5F2ED] border border-black/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                                <div class="space-y-1">
-                                    <div class="font-serif italic text-sm text-[#1A1A1A]">${c.listing.title}</div>
-                                    <div class="text-[11px] text-black/50">${c.listing.address} (지목: ${c.listing.jimok_official})</div>
-                                    <div class="text-xs text-[#3A5A40] font-serif font-bold">${(c.listing.price / 100000000).toFixed(1)} 억원</div>
-                                </div>
-                                <div class="flex flex-wrap items-center gap-1.5">
-                                    <button onclick="openLandUseReviewModal('${c.listing.listing_id}')" class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 hover:bg-[#3A5A40] hover:text-white text-[#3A5A40] font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
-                                        <i class="fa-solid fa-gift"></i> 무상 토지이용계획 분석
-                                    </button>
-                                    <button onclick="openSecurePdfViewer('${c.listing.listing_id}', 'LURIS')" class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
-                                        <i class="fa-solid fa-file-pdf text-red-600"></i> 보안 PDF 리뷰
-                                    </button>
-                                    <button onclick="openBookingModalForListing('${c.listing.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[10px] px-2.5 py-1 uppercase transition">
-                                        미팅 예약
-                                    </button>
-                                    <button onclick="removeCartItem('${c.listing.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심토지 삭제">
-                                        <i class="fa-solid fa-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        `;
+            let cartListings = [];
+            if (currentUser) {
+                try {
+                    const res = await fetch('/api/cart', {
+                        headers: { 'Authorization': `Bearer ${currentUser.token}` }
                     });
+                    const items = await res.json();
+                    cartListings = items.map(c => ({ listing: c.listing || c, cart_id: c.cart_id }));
+                } catch (err) {
+                    alert('카트 정보를 불러올 수 없습니다.');
+                    return;
                 }
-
-                openModal('cart-modal');
-            } catch (err) {
-                alert('카트 정보를 불러올 수 없습니다.');
+            } else {
+                const guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
+                cartListings = currentListings.filter(l => guestCart.includes(l.listing_id)).map(l => ({ listing: l, cart_id: `guest-${l.listing_id}` }));
             }
+
+            const list = document.getElementById('cart-items-list');
+            list.innerHTML = '';
+            document.getElementById('cart-total-count').innerText = cartListings.length;
+
+            if (cartListings.length === 0) {
+                list.innerHTML = `<p class="text-center py-6 text-black/40">쇼핑카드에 담긴 관심 토지가 없습니다.</p>`;
+            } else {
+                cartListings.forEach(c => {
+                    const l = c.listing;
+                    list.innerHTML += `
+                        <div class="p-3 bg-[#F5F2ED] border border-black/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                            <div class="space-y-1">
+                                <div class="font-serif italic text-sm text-[#1A1A1A]">${l.title}</div>
+                                <div class="text-[11px] text-black/50">${l.address} (지목: ${l.jimok_official})</div>
+                                <div class="text-xs text-[#3A5A40] font-serif font-bold">${(l.price / 100000000).toFixed(1)} 억원</div>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <button onclick="openLandUseReviewModal('${l.listing_id}')" class="bg-[#3A5A40]/10 border border-[#3A5A40]/30 hover:bg-[#3A5A40] hover:text-white text-[#3A5A40] font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                    <i class="fa-solid fa-gift"></i> 무상 토지분석
+                                </button>
+                                <button onclick="openSecurePdfViewer('${l.listing_id}', 'LURIS')" class="bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-[10px] px-2.5 py-1 transition flex items-center gap-1">
+                                    <i class="fa-solid fa-file-pdf text-red-600"></i> 보안 PDF
+                                </button>
+                                <button onclick="openBookingModalForListing('${l.listing_id}')" class="bg-[#3A5A40] hover:bg-[#2A422F] text-white font-bold text-[10px] px-2.5 py-1 uppercase transition">
+                                    미팅 예약
+                                </button>
+                                <button onclick="removeCartItem('${l.listing_id}')" class="text-black/30 hover:text-rose-600 p-1" title="관심토지 삭제">
+                                    <i class="fa-solid fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            openModal('cart-modal');
         }
 
         async function removeCartItem(listingId) {
-            try {
-                await fetch(`/api/cart/${listingId}`, {
-                    method: 'DELETE',
-                    headers: { 'Authorization': `Bearer ${currentUser.token}` }
-                });
-                openCartModal();
-                updateCartBadge();
-            } catch (e) {
-                console.error(e);
+            if (currentUser) {
+                try {
+                    await fetch(`/api/cart/${listingId}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${currentUser.token}` }
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
+            } else {
+                let guestCart = JSON.parse(localStorage.getItem('guest_cart_listings') || '[]');
+                guestCart = guestCart.filter(id => id !== listingId);
+                localStorage.setItem('guest_cart_listings', JSON.stringify(guestCart));
             }
+            openCartModal();
+            updateCartBadge();
         }
 
         function openBookingModalForCurrent() {
@@ -3631,6 +4356,9 @@ ${apisListStr}
             document.getElementById('view-home').classList.remove('hidden');
             document.getElementById('view-detail').classList.add('hidden');
             document.getElementById('view-dashboard').classList.add('hidden');
+            if (landingMap) {
+                setTimeout(() => { landingMap.invalidateSize(); }, 150);
+            }
         }
 
         function openModal(id) {
